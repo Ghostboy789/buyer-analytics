@@ -1,0 +1,11 @@
+google-cloud-bigquery[pandas]
+google-cloud-bigquery-storage
+pydata-google-auth
+pyarrow
+duckdb
+pandas
+numpy
+scipy
+statsmodels
+pytest
+ruff
