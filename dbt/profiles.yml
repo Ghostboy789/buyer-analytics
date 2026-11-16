@@ -1,0 +1,9 @@
+buyer_analytics:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('BUYER_DUCKDB_PATH', 'buyer.duckdb') }}"
+      threads: 4
+      settings:
+        memory_limit: "4GB"

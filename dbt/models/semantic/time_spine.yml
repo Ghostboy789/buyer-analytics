@@ -1,0 +1,13 @@
+version: 2
+
+models:
+  - name: metricflow_time_spine
+    description: >
+      Day-grain calendar used by MetricFlow as the project time spine, from
+      2020-11-01 to 2021-01-31 inclusive.
+    time_spine:
+      standard_granularity_column: date_day
+    columns:
+      - name: date_day
+        description: Calendar day with day granularity.
+        granularity: day

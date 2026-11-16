@@ -1,0 +1,137 @@
+version: 2
+
+semantic_models:
+  - name: metrics_daily
+    description: >
+      Daily additive business metrics built from sessions, orders and users,
+      with one row per calendar day.
+    model: ref('metrics_daily')
+    defaults:
+      agg_time_dimension: date_day
+    entities:
+      - name: metrics_daily
+        type: primary
+        expr: date_day
+    dimensions:
+      - name: date_day
+        description: Calendar day of the metric row.
+        type: time
+        type_params:
+          time_granularity: day
+    measures:
+      - name: sessions
+        description: Sessions under the definitions above.
+        agg: sum
+        expr: sessions
+      - name: orders
+        description: Collapsed orders under the definitions above. Zero-revenue orders stay orders.
+        agg: sum
+        expr: orders
+      - name: purchasing_sessions
+        description: Sessions with at least one order.
+        agg: sum
+        expr: purchasing_sessions
+      - name: revenue_usd
+        description: Revenue is purchase_revenue_in_usd; tax, shipping and refunds are not netted.
+        agg: sum
+        expr: revenue_usd
+      - name: items_quantity
+        description: Sum of total_item_quantity on orders.
+        agg: sum
+        expr: items_quantity
+      - name: zero_revenue_orders
+        description: Zero-revenue orders stay orders; their share is reported beside AOV.
+        agg: sum
+        expr: zero_revenue_orders
+      - name: active_users
+        description: >
+          Distinct users with a session that day. Not additive across days
+          because a user active on more than one day is counted once per day.
+        agg: sum
+        expr: active_users
+      - name: new_users
+        description: Users first seen that day.
+        agg: sum
+        expr: new_users
+
+metrics:
+  - name: sessions
+    label: Sessions
+    type: simple
+    description: Sessions under the definitions above.
+    type_params:
+      measure: sessions
+
+  - name: orders
+    label: Orders
+    type: simple
+    description: Collapsed orders under the definitions above. Zero-revenue orders stay orders.
+    type_params:
+      measure: orders
+
+  - name: revenue
+    label: Revenue
+    type: simple
+    description: Revenue is purchase_revenue_in_usd; tax, shipping and refunds are not netted.
+    type_params:
+      measure: revenue_usd
+
+  - name: new_users
+    label: New users
+    type: simple
+    description: New users are one user_pseudo_id, a browser cookie, not a person.
+    type_params:
+      measure: new_users
+
+  - name: purchasing_sessions
+    label: Purchasing sessions
+    type: simple
+    description: Sessions with at least one order.
+    type_params:
+      measure: purchasing_sessions
+
+  - name: items_quantity
+    label: Items quantity
+    type: simple
+    description: Sum of total_item_quantity on orders.
+    type_params:
+      measure: items_quantity
+
+  - name: zero_revenue_orders
+    label: Zero-revenue orders
+    type: simple
+    description: Zero-revenue orders stay orders; their share is reported beside AOV.
+    type_params:
+      measure: zero_revenue_orders
+
+  - name: session_conversion
+    label: Session conversion
+    type: ratio
+    description: Sessions with at least one order / sessions.
+    type_params:
+      numerator: purchasing_sessions
+      denominator: sessions
+
+  - name: aov
+    label: Average order value
+    type: ratio
+    description: Revenue / orders, zero-revenue orders included; their share is reported beside it.
+    type_params:
+      numerator: revenue
+      denominator: orders
+
+  - name: items_per_order
+    label: Items per order
+    type: ratio
+    description: Sum of total_item_quantity / orders.
+    type_params:
+      numerator: items_quantity
+      denominator: orders
+
+  - name: zero_revenue_order_share
+    label: Zero-revenue order share
+    type: ratio
+    description: Zero-revenue orders / orders.
+    type_params:
+      numerator: zero_revenue_orders
+      denominator: orders

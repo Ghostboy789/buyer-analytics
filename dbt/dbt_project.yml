@@ -1,0 +1,20 @@
+name: buyer_analytics
+version: "1.0.0"
+config-version: 2
+
+profile: buyer_analytics
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  buyer_analytics:
+    staging:
+      +materialized: table
+    intermediate:
+      +materialized: table
+    marts:
+      +materialized: table

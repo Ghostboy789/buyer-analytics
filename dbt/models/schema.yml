@@ -1,0 +1,508 @@
+version: 2
+
+models:
+  - name: stg_events
+    description: >
+      One row per raw GA4 event, flattened into typed columns. This is the only
+      model that reads the raw Parquet export.
+    columns:
+      - name: event_ts
+        description: Event timestamp in UTC, built from the microsecond event_timestamp.
+        tests:
+          - not_null
+      - name: event_date
+        description: UTC event date parsed from the YYYYMMDD event_date string.
+        tests:
+          - not_null
+      - name: event_name
+        description: GA4 event name.
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                - page_view
+                - user_engagement
+                - scroll
+                - view_item
+                - session_start
+                - first_visit
+                - view_promotion
+                - add_to_cart
+                - begin_checkout
+                - select_item
+                - view_search_results
+                - add_shipping_info
+                - add_payment_info
+                - select_promotion
+                - purchase
+                - click
+                - view_item_list
+      - name: user_pseudo_id
+        description: Browser cookie identifier for the user.
+        tests:
+          - not_null
+      - name: ga_session_id
+        description: GA4 session id from the event parameters.
+        tests:
+          - not_null
+      - name: session_number
+        description: GA4 ga_session_number event parameter.
+      - name: session_key
+        description: user_pseudo_id and ga_session_id joined with a hyphen.
+        tests:
+          - not_null
+      - name: device_category
+        description: Device category on the event.
+      - name: country
+        description: Country from the event's geo struct.
+      - name: ts_source
+        description: User-level first-touch traffic source.
+      - name: ts_medium
+        description: User-level first-touch traffic medium.
+      - name: transaction_id
+        description: Raw ecommerce transaction id; may be null or "(not set)".
+      - name: purchase_revenue_usd
+        description: Purchase revenue in USD on purchase events.
+      - name: total_item_quantity
+        description: Total item quantity on purchase events.
+      - name: ep_source
+        description: Session-level source event parameter.
+
+  - name: int_user_first_touch
+    description: >
+      One row per user with the attributes of the user's earliest event and the
+      ordered first-touch channel rule.
+    columns:
+      - name: user_pseudo_id
+        description: Browser cookie identifier for the user.
+        tests:
+          - unique
+          - not_null
+      - name: first_seen_ts
+        description: Timestamp of the user's first event in the data.
+      - name: first_source
+        description: Raw traffic_source.source on the user's first event.
+      - name: first_medium
+        description: Raw traffic_source.medium on the user's first event.
+      - name: channel
+        description: First-touch channel group.
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                - direct
+                - organic_search
+                - paid_search
+                - referral
+                - undisclosed
+                - other
+
+  - name: int_orders
+    description: >
+      One row per order after collapsing duplicate purchase events by
+      transaction id, or by session when the id is missing or "(not set)".
+    columns:
+      - name: order_key
+        description: MD5 of the user and the collapsed order group.
+        tests:
+          - unique
+          - not_null
+      - name: user_pseudo_id
+        description: Browser cookie identifier for the user.
+        tests:
+          - not_null
+      - name: session_key
+        description: Session of the earliest collapsed purchase event.
+        tests:
+          - not_null
+      - name: order_ts
+        description: Timestamp of the earliest collapsed purchase event.
+      - name: order_date
+        description: UTC date of order_ts.
+      - name: transaction_id
+        description: Real transaction id, null when the raw id was missing or "(not set)".
+      - name: purchase_events
+        description: Number of raw purchase events collapsed into the order.
+      - name: revenue_usd
+        description: Largest purchase revenue among the collapsed events.
+      - name: items_quantity
+        description: Largest total_item_quantity among the collapsed events.
+      - name: is_zero_revenue
+        description: True when revenue_usd is zero.
+      - name: order_seq
+        description: One-based order sequence for the user, ordered by order time.
+
+  - name: int_sessions
+    description: >
+      One row per session with first-event attributes, event counts and the
+      raw has-event flags used to build the closed funnel.
+    columns:
+      - name: session_key
+        description: user_pseudo_id and ga_session_id joined with a hyphen.
+        tests:
+          - unique
+          - not_null
+      - name: user_pseudo_id
+        description: Browser cookie identifier for the user.
+        tests:
+          - not_null
+      - name: ga_session_id
+        description: GA4 session id.
+      - name: session_number
+        description: GA4 session number.
+      - name: session_start_ts
+        description: Timestamp of the first event in the session.
+      - name: session_end_ts
+        description: Timestamp of the last event in the session.
+      - name: session_date
+        description: UTC date of the first event in the session.
+      - name: events
+        description: Number of events in the session.
+      - name: page_views
+        description: Number of page_view events in the session.
+      - name: device_category
+        description: Device category on the session's first event.
+      - name: country
+        description: Country on the session's first event.
+      - name: channel
+        description: The user's first-touch channel group.
+      - name: has_view_item
+        description: A view_item event exists in the session.
+      - name: has_add_to_cart
+        description: An add_to_cart event exists in the session.
+      - name: has_begin_checkout
+        description: A begin_checkout event exists in the session.
+      - name: has_add_shipping_info
+        description: An add_shipping_info event exists in the session.
+      - name: has_add_payment_info
+        description: An add_payment_info event exists in the session.
+      - name: has_purchase
+        description: A purchase event exists in the session.
+
+  - name: fct_sessions
+    description: >
+      One row per session. Session attributes come from the first event, orders
+      and revenue are attributed from collapsed orders, and funnel_step is the
+      deepest reached step in the closed funnel.
+    columns:
+      - name: session_key
+        description: Primary key; user_pseudo_id and ga_session_id joined with a hyphen.
+        tests:
+          - unique
+          - not_null
+      - name: user_pseudo_id
+        description: Browser cookie identifier for the user.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_users')
+              field: user_pseudo_id
+      - name: ga_session_id
+        description: GA4 session id.
+      - name: session_number
+        description: GA4 session number; nullable.
+      - name: session_start_ts
+        description: Timestamp of the first event in the session.
+      - name: session_end_ts
+        description: Timestamp of the last event in the session.
+      - name: session_date
+        description: UTC date of the first event in the session.
+      - name: events
+        description: Number of events in the session.
+      - name: page_views
+        description: Number of page_view events in the session.
+      - name: device_category
+        description: Device category on the session's first event.
+      - name: country
+        description: Country on the session's first event.
+      - name: country_group
+        description: The five countries with the most sessions, otherwise Other.
+      - name: channel
+        description: The user's first-touch channel group.
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                - direct
+                - organic_search
+                - paid_search
+                - referral
+                - undisclosed
+                - other
+      - name: has_view_item
+        description: A view_item event exists in the session.
+      - name: has_add_to_cart
+        description: An add_to_cart event exists in the session.
+      - name: has_begin_checkout
+        description: A begin_checkout event exists in the session.
+      - name: has_add_shipping_info
+        description: An add_shipping_info event exists in the session.
+      - name: has_add_payment_info
+        description: An add_payment_info event exists in the session.
+      - name: has_purchase
+        description: A purchase event exists in the session.
+      - name: funnel_step
+        description: Deepest closed-funnel step reached, from 0 to 6.
+      - name: orders
+        description: Collapsed orders attributed to the session; zero when none.
+      - name: revenue_usd
+        description: Revenue from orders attributed to the session; zero when none.
+
+  - name: fct_orders
+    description: >
+      One row per collapsed order. Purchase events are grouped by transaction id
+      within a user, or by session when the transaction id is missing.
+    columns:
+      - name: order_key
+        description: Primary key; MD5 of the user and collapsed order group.
+        tests:
+          - unique
+          - not_null
+      - name: user_pseudo_id
+        description: Browser cookie identifier for the user.
+        tests:
+          - not_null
+      - name: session_key
+        description: Session of the earliest collapsed purchase event.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('fct_sessions')
+              field: session_key
+      - name: order_ts
+        description: Timestamp of the earliest collapsed purchase event.
+      - name: order_date
+        description: UTC date of order_ts.
+      - name: transaction_id
+        description: Real transaction id; nullable when the raw id was missing or "(not set)".
+      - name: purchase_events
+        description: Number of raw purchase events collapsed into the order.
+      - name: revenue_usd
+        description: Largest purchase revenue among the collapsed events.
+      - name: items_quantity
+        description: Largest total_item_quantity among the collapsed events; nullable.
+      - name: is_zero_revenue
+        description: True when revenue_usd is zero.
+      - name: order_seq
+        description: One-based order sequence for the user, ordered by order time.
+
+  - name: fct_funnel_daily
+    description: >
+      One row per session_date, device category, channel and country group with
+      closed-funnel session counts.
+    columns:
+      - name: session_date
+        description: UTC session date.
+        tests:
+          - not_null
+      - name: device_category
+        description: Device category on the session's first event.
+        tests:
+          - not_null
+      - name: channel
+        description: The user's first-touch channel group.
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                - direct
+                - organic_search
+                - paid_search
+                - referral
+                - undisclosed
+                - other
+      - name: country_group
+        description: Top-five country or Other.
+        tests:
+          - not_null
+      - name: sessions
+        description: Number of sessions in the grain.
+      - name: s_view_item
+        description: Sessions that reached closed-funnel step 1.
+      - name: s_add_to_cart
+        description: Sessions that reached closed-funnel step 2.
+      - name: s_begin_checkout
+        description: Sessions that reached closed-funnel step 3.
+      - name: s_add_shipping_info
+        description: Sessions that reached closed-funnel step 4.
+      - name: s_add_payment_info
+        description: Sessions that reached closed-funnel step 5.
+      - name: s_purchase
+        description: Sessions that reached closed-funnel step 6.
+      - name: purchase_sessions_open
+        description: Sessions with a purchase event, ignoring earlier steps.
+
+  - name: fct_cohort_retention
+    description: >
+      Cohort retention by Monday-start cohort week and week offset. Only cohorts
+      whose first week is fully inside the data are included.
+    columns:
+      - name: cohort_week
+        description: Monday of the user's first-seen week.
+        tests:
+          - not_null
+      - name: week_offset
+        description: Weeks after the cohort week, starting at zero.
+        tests:
+          - not_null
+      - name: cohort_users
+        description: Users in the cohort.
+      - name: active_users
+        description: Cohort users with a session in the offset week.
+      - name: buyers
+        description: Cohort users with an order attributed to a session in the offset week.
+      - name: is_complete
+        description: The offset week ends on or before the last date in the data.
+
+  - name: fct_user_outcomes
+    description: >
+      One row per user with a session in P3 (2021-01-04 to 2021-01-31), with
+      entry day, P3 outcomes and pre-period history.
+    columns:
+      - name: user_pseudo_id
+        description: Primary key; browser cookie identifier for the user.
+        tests:
+          - unique
+          - not_null
+      - name: entry_day_index
+        description: Days from 2021-01-04 to the user's first P3 session.
+      - name: converted
+        description: The user has at least one order in P3.
+      - name: first_purchase_day_index
+        description: Days from 2021-01-04 to the first P3 session with an order; nullable.
+      - name: orders
+        description: Orders in P3.
+      - name: revenue_usd
+        description: Revenue in P3; zero for non-buyers.
+      - name: has_pre_period
+        description: The user has a session before 2021-01-04.
+      - name: pre_sessions
+        description: Sessions before 2021-01-04.
+      - name: pre_orders
+        description: Orders attributed to sessions before 2021-01-04.
+      - name: pre_revenue_usd
+        description: Revenue attributed to sessions before 2021-01-04.
+      - name: device_category
+        description: Device category of the user's first P3 session.
+      - name: channel
+        description: The user's first-touch channel group.
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                - direct
+                - organic_search
+                - paid_search
+                - referral
+                - undisclosed
+                - other
+
+  - name: dim_users
+    description: >
+      One row per user with first-touch attributes, lifetime session and order
+      totals, and the first two order timestamps.
+    columns:
+      - name: user_pseudo_id
+        description: Primary key; browser cookie identifier for the user.
+        tests:
+          - unique
+          - not_null
+      - name: first_seen_ts
+        description: Timestamp of the user's first event in the data.
+      - name: first_seen_date
+        description: UTC date of the user's first event.
+      - name: cohort_week
+        description: Monday of first_seen_date.
+      - name: first_source
+        description: Raw traffic_source.source on the user's first event.
+      - name: first_medium
+        description: Raw traffic_source.medium on the user's first event.
+      - name: channel
+        description: The user's first-touch channel group.
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                - direct
+                - organic_search
+                - paid_search
+                - referral
+                - undisclosed
+                - other
+      - name: device_category
+        description: Device category of the user's first session.
+      - name: country
+        description: Country of the user's first session.
+      - name: sessions
+        description: Number of sessions for the user.
+      - name: orders
+        description: Number of collapsed orders for the user.
+      - name: revenue_usd
+        description: Sum of collapsed order revenue for the user.
+      - name: first_order_ts
+        description: Timestamp of the user's first order; nullable.
+      - name: second_order_ts
+        description: Timestamp of the user's second order; nullable.
+
+  - name: dim_channel
+    description: One row per first-touch channel group with display label and sort order.
+    columns:
+      - name: channel
+        description: Primary key; channel group name.
+        tests:
+          - unique
+          - not_null
+          - accepted_values:
+              values:
+                - direct
+                - organic_search
+                - paid_search
+                - referral
+                - undisclosed
+                - other
+      - name: label
+        description: Display name for the channel.
+      - name: sort_order
+        description: Stable display order.
+
+  - name: dim_date
+    description: One row per day from 2020-11-01 to 2021-01-31 with week and period labels.
+    columns:
+      - name: date_day
+        description: Primary key; calendar date.
+        tests:
+          - unique
+          - not_null
+      - name: week_start
+        description: Monday of the week.
+      - name: day_of_week
+        description: ISO day of week, 1 Monday to 7 Sunday.
+      - name: period
+        description: P1, P2, P3 or none.
+
+  - name: metrics_daily
+    description: >
+      One row per day in dim_date with additive session, user, order and revenue
+      counts, and zeros where nothing happened.
+    columns:
+      - name: date_day
+        description: Primary key; calendar date.
+        tests:
+          - unique
+          - not_null
+      - name: sessions
+        description: Sessions by session_date.
+      - name: active_users
+        description: Distinct users with a session that day.
+      - name: new_users
+        description: Users first seen that day.
+      - name: orders
+        description: Collapsed orders by order_date.
+      - name: purchasing_sessions
+        description: Sessions with at least one order, by session_date.
+      - name: revenue_usd
+        description: Collapsed order revenue by order_date.
+      - name: items_quantity
+        description: Items quantity on orders by order_date.
+      - name: zero_revenue_orders
+        description: Zero-revenue orders by order_date.

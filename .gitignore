@@ -13,3 +13,6 @@ dbt/dbt_packages/
 .DS_Store
 .env
 *.tmp
+dbt/.user.yml
+dbt/*.duckdb*
+site/data/.tmp*
