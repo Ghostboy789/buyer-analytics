@@ -94,7 +94,7 @@
   function chartCard(title, chart, meaning, table) {
     return card(
       title,
-      '<div class="chart-wrap">' +
+      '<div class="chart-wrap" tabindex="0" role="group" aria-label="Chart (scrolls sideways on narrow screens)">' +
         chart +
         "</div>" +
         (meaning ? '<p class="meaning"><span class="meaning-label">What this means</span> ' + meaning + "</p>" : "") +
@@ -322,9 +322,9 @@
       '<section class="hero">' +
       '<div class="hero-copy" data-reveal>' +
       '<p class="eyebrow">Overview</p>' +
-      '<h1 class="display hero-headline">Of every 1,000 ' +
+      '<h1 class="display hero-headline">Of every 1,000 <span class="nowrap">' +
       term("session", "sessions") +
-      ', <span class="hero-num">' +
+      ',</span> <span class="hero-num">' +
       nBuy +
       "</span> buy.</h1>" +
       '<p class="hero-sub">A ' +
@@ -338,22 +338,28 @@
       ", n = " +
       C.formatInt(k.session_conversion.n) +
       ").</p>" +
-      '<p class="hero-look">Follow the thousand squares below: each one is one session in a thousand, sorted into the ' +
-      term("closed_funnel", "funnel") +
-      " steps. The muted squares are the ones that never reach the next step.</p>" +
+      '<p class="hero-look">Each square is one session in a thousand. Read the blocks left to right: the bright squares reached that step, the muted ones dropped out on the way.</p>' +
       "</div>" +
-      '<div class="hero-visual" data-reveal>' +
-      '<canvas class="hero-canvas" data-hero role="img" aria-label="A field of one thousand squares, one for every thousand sessions, sorted by how far each session got. ' +
+      '<div class="hero-visual card" data-reveal>' +
+      '<canvas class="hero-canvas" data-hero role="img" aria-label="Six blocks of squares, one per funnel step, each square a session in a thousand. ' +
       nBuy +
       ' of the thousand reach the purchase step; most never view an item." data-sessions="' +
       sessions +
       '" data-open="' +
       overall.open_reached.join(",") +
+      '" data-steps="' +
+      esc(
+        steps
+          .map(function (step) {
+            return prettyStep(step);
+          })
+          .join("|")
+      ) +
       '" data-purchase="' +
       nBuy +
       '"></canvas>' +
-      '<p class="hero-caption">One square is one session in a thousand. The same six numbers, as a table:</p>' +
-      heroTable +
+      '<p class="hero-caption">Each block redraws the sessions that reached the one before it.</p>' +
+      details("Exact numbers", heroTable) +
       "</div>" +
       "</section>";
 

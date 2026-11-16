@@ -567,7 +567,15 @@ main {
 
 .chart-wrap {
   margin: 0;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+@media (max-width: 700px) {
+  /* Keep chart text readable: the chart scrolls inside its card instead of shrinking. */
+  .chart-wrap > svg {
+    min-width: 560px;
+  }
 }
 
 .chart-wrap svg {
@@ -596,23 +604,57 @@ main {
 
 .hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--space-5);
-  align-items: center;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: var(--space-4) var(--space-6);
+  align-items: end;
   margin: 0 0 var(--space-7);
+  padding-top: var(--space-4);
 }
 
 .hero-copy {
-  max-width: 34rem;
+  display: contents;
+}
+
+.hero-copy > .eyebrow,
+.hero-copy > .hero-headline {
+  grid-column: 1;
+}
+
+.hero-copy > .eyebrow {
+  grid-row: 1;
+  margin: 0;
 }
 
 .hero-headline {
+  grid-row: 2;
   font-size: var(--step-5);
   font-weight: 600;
   line-height: 1.03;
   letter-spacing: -0.03em;
-  margin: var(--space-2) 0 var(--space-3);
+  margin: 0;
   text-wrap: balance;
+}
+
+.hero-sub,
+.hero-look {
+  grid-column: 2;
+}
+
+.hero-sub {
+  grid-row: 1 / span 2;
+  align-self: end;
+  font-size: var(--step-1);
+  color: var(--ink-2);
+  margin: 0 0 var(--space-1);
+}
+
+.hero-look {
+  grid-row: 3;
+  grid-column: 1 / -1;
+  max-width: 44rem;
+  font-size: 1rem;
+  color: var(--ink-2);
+  margin: 0;
 }
 
 .hero-num {
@@ -620,35 +662,27 @@ main {
   font-variant-numeric: tabular-nums;
 }
 
-.hero-sub {
-  font-size: var(--step-1);
-  color: var(--ink-2);
-  margin: 0 0 var(--space-3);
-}
-
-.hero-look {
-  font-size: 0.95rem;
-  color: var(--ink-2);
-  margin: 0;
+.nowrap {
+  white-space: nowrap;
 }
 
 .hero-visual {
+  grid-column: 1 / -1;
   min-width: 0;
+  margin: 0;
+  padding: var(--space-4);
 }
 
 .hero-canvas {
   display: block;
   width: 100%;
-  height: auto;
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
 }
 
 .hero-caption {
-  margin: var(--space-2) 0 var(--space-3);
-  font-size: 0.85rem;
-  color: var(--ink-2);
+  margin: var(--space-3) 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--step--1);
+  color: var(--ink-3);
 }
 
 /* Glossary -------------------------------------------------------------- */
@@ -703,7 +737,7 @@ main {
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 168px), 1fr));
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .kpi {
@@ -903,7 +937,7 @@ td.num,
 }
 
 td.num {
-  white-space: nowrap;
+  min-width: 5.5rem;
 }
 
 .data-toggle {
@@ -1200,8 +1234,34 @@ td.num {
 
 .bento {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: var(--space-3);
+}
+
+.bento > * {
+  grid-column: span 2;
+}
+
+.bento > :nth-child(n + 4) {
+  grid-column: span 3;
+}
+
+@media (max-width: 900px) {
+  .bento > *,
+  .bento > :nth-child(n + 4) {
+    grid-column: span 3;
+  }
+
+  .bento > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 560px) {
+  .bento > *,
+  .bento > :nth-child(n + 4) {
+    grid-column: 1 / -1;
+  }
 }
 
 .bento-card {
@@ -1506,11 +1566,20 @@ td.num {
 @media (max-width: 900px) {
   .hero {
     grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-4);
+    gap: var(--space-3);
   }
 
-  .hero-copy {
-    max-width: none;
+  .hero-copy > .eyebrow,
+  .hero-copy > .hero-headline,
+  .hero-sub,
+  .hero-look {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .hero-visual {
+    grid-column: 1;
+    padding: var(--space-3);
   }
 }
 
@@ -1595,4 +1664,72 @@ main#content {
   max-width: 1120px;
   margin-inline: auto;
   padding-inline: clamp(16px, 4vw, 32px);
+}
+
+/* Lab: sit in the shared column, collapse empty result slots. */
+.wrap > main#content {
+  padding-inline: 0;
+  padding-top: 0;
+}
+
+.result:empty,
+.chart-box:empty {
+  display: none;
+}
+
+.status:empty {
+  min-height: 0;
+  margin: 0;
+}
+
+/* The peeking trap: three large figures, the inflated one in the loss colour. */
+#peeking .bigstat {
+  padding: var(--space-5) var(--space-4) var(--space-4);
+}
+
+#peeking .bigstat-value {
+  font-size: clamp(2.5rem, 1.5rem + 4vw, 4rem);
+  line-height: 1;
+}
+
+#peeking .bigstat:nth-child(2) {
+  border-color: var(--lost);
+  background: var(--lost-tint);
+}
+
+#peeking .bigstat:nth-child(2) .bigstat-value {
+  color: var(--lost);
+}
+
+.wrap > .page-head {
+  padding-top: calc(var(--space-6) * 2);
+}
+
+.result .big {
+  color: var(--accent);
+  font-size: clamp(2rem, 1.4rem + 2.4vw, 3rem);
+  line-height: 1.05;
+}
+
+@media (min-width: 901px) {
+  .kpi-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .card {
+    padding: var(--space-3);
+  }
+}
+
+.kv dd {
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 420px) {
+  .kv dd {
+    white-space: normal;
+  }
 }

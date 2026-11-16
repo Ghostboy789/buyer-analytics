@@ -215,11 +215,11 @@
         '<rect x="' +
         plotX +
         '" y="' +
-        y +
+        (cy - rowHeight * 0.3) +
         '" width="' +
         barW.toFixed(2) +
         '" height="' +
-        rowHeight +
+        rowHeight * 0.6 +
         '" rx="3" fill="' +
         barFill +
         '" class="chart-bar" />';
@@ -229,36 +229,14 @@
         var high = isNum(r.ci_high) ? r.ci_high : value;
         var x1 = plotX + Math.max(0, low) * scale;
         var x2 = plotX + Math.max(0, high) * scale;
-        out +=
-          '<line x1="' +
-          x1.toFixed(2) +
-          '" y1="' +
-          cy +
-          '" x2="' +
-          x2.toFixed(2) +
-          '" y2="' +
-          cy +
-          '" stroke="var(--ink-2)" stroke-width="1.5" />';
-        out +=
-          '<line x1="' +
-          x1.toFixed(2) +
-          '" y1="' +
-          (cy - 5) +
-          '" x2="' +
-          x1.toFixed(2) +
-          '" y2="' +
-          (cy + 5) +
-          '" stroke="var(--ink-2)" stroke-width="1.5" />';
-        out +=
-          '<line x1="' +
-          x2.toFixed(2) +
-          '" y1="' +
-          (cy - 5) +
-          '" x2="' +
-          x2.toFixed(2) +
-          '" y2="' +
-          (cy + 5) +
-          '" stroke="var(--ink-2)" stroke-width="1.5" />';
+        [["var(--surface)", 4.5], ["var(--ink)", 1.75]].forEach(function (st) {
+          out +=
+            '<path d="M' + x1.toFixed(2) + " " + cy + "H" + x2.toFixed(2) +
+            "M" + x1.toFixed(2) + " " + (cy - 5) + "V" + (cy + 5) +
+            "M" + x2.toFixed(2) + " " + (cy - 5) + "V" + (cy + 5) +
+            '" fill="none" stroke="' + st[0] + '" stroke-width="' + st[1] +
+            '" stroke-linecap="round" class="chart-whisker" />';
+        });
       }
 
       out += text(width - 6, cy, format(r.value), "chart-value", "end", ' dy="0.35em"');
@@ -358,36 +336,14 @@
         var high = isNum(r.ci_high) ? r.ci_high : value;
         var x1 = px(low);
         var x2 = px(high);
-        out +=
-          '<line x1="' +
-          x1.toFixed(2) +
-          '" y1="' +
-          cy +
-          '" x2="' +
-          x2.toFixed(2) +
-          '" y2="' +
-          cy +
-          '" stroke="var(--ink-2)" stroke-width="1.5" />';
-        out +=
-          '<line x1="' +
-          x1.toFixed(2) +
-          '" y1="' +
-          (cy - 5) +
-          '" x2="' +
-          x1.toFixed(2) +
-          '" y2="' +
-          (cy + 5) +
-          '" stroke="var(--ink-2)" stroke-width="1.5" />';
-        out +=
-          '<line x1="' +
-          x2.toFixed(2) +
-          '" y1="' +
-          (cy - 5) +
-          '" x2="' +
-          x2.toFixed(2) +
-          '" y2="' +
-          (cy + 5) +
-          '" stroke="var(--ink-2)" stroke-width="1.5" />';
+        [["var(--surface)", 4.5], ["var(--ink)", 1.75]].forEach(function (st) {
+          out +=
+            '<path d="M' + x1.toFixed(2) + " " + cy + "H" + x2.toFixed(2) +
+            "M" + x1.toFixed(2) + " " + (cy - 5) + "V" + (cy + 5) +
+            "M" + x2.toFixed(2) + " " + (cy - 5) + "V" + (cy + 5) +
+            '" fill="none" stroke="' + st[0] + '" stroke-width="' + st[1] +
+            '" stroke-linecap="round" class="chart-whisker" />';
+        });
       }
 
       out += text(width - 6, cy, format(r.value), "chart-value", "end", ' dy="0.35em"');
@@ -701,7 +657,8 @@
     var plotW = Math.max(10, plotRight - plotX);
     var pairH = 12;
     var pairGap = 4;
-    var height = top + rows.length * (rowHeight + gap) - gap + bottom;
+    var legendH = 30;
+    var height = top + rows.length * (rowHeight + gap) - gap + bottom + legendH;
 
     var maxValue = 0;
     for (var j = 0; j < rows.length; j += 1) {
@@ -721,7 +678,7 @@
       '" x2="' +
       plotX +
       '" y2="' +
-      (height - bottom) +
+      (height - bottom - legendH) +
       '" stroke="var(--border)" stroke-width="1" />';
 
     for (var k = 0; k < rows.length; k += 1) {
@@ -750,21 +707,16 @@
         '" height="' +
         pairH +
         '" rx="2" fill="var(--accent-soft-strong)" />';
-      out += text(plotX + Math.max(closedW, openW) + 8, y + rowHeight / 2, format(r.closed), "chart-value", "start", ' dy="0.35em"');
+      out += text(plotX + closedW + 8, y + pairH / 2, format(r.closed), "chart-value", "start", ' dy="0.35em"');
+      out += text(plotX + openW + 8, y + pairH + pairGap + pairH / 2, format(r.open), "chart-value", "start", ' dy="0.35em"');
     }
 
-    out +=
-      '<line x1="' +
-      plotX +
-      '" y1="' +
-      (height - bottom + 2) +
-      '" x2="' +
-      plotX +
-      '" y2="' +
-      (height - bottom + 2) +
-      '" stroke="none" />';
-    out += text(plotX, height - 2, "\u25A0 closed (needs every earlier step)", "chart-label", "start");
-    out += text(plotX + 250, height - 2, "\u25A0 open (step event present)", "chart-label", "start");
+    var ly = height - 8;
+    out += '<rect x="' + plotX + '" y="' + (ly - 9) + '" width="10" height="10" rx="2" fill="var(--accent)" />';
+    out += text(plotX + 16, ly - 4, "closed (needs every earlier step)", "chart-label", "start", ' dy="0.35em"');
+    out += '<rect x="' + (plotX + 232) + '" y="' + (ly - 9) + '" width="10" height="10" rx="2" fill="var(--accent-soft-strong)" />';
+    out += text(plotX + 248, ly - 4, "open (step event present)", "chart-label", "start", ' dy="0.35em"');
+
     return out + "</svg>";
   }
 
