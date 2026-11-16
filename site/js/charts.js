@@ -1,8 +1,9 @@
 /* Pure SVG chart builders for the Buyer Analytics site.
  *
  * Each helper takes plain arrays and objects and returns an SVG string with a
- * viewBox and width="100%". Colours come from CSS custom properties and
- * currentColor so the charts follow the active theme. All text is escaped.
+ * viewBox and width="100%". Colours come from CSS custom properties so the
+ * charts follow the active theme. All text is escaped. Nothing here touches the
+ * DOM, so the module loads under Node for testing.
  */
 (function (global) {
   "use strict";
@@ -20,9 +21,11 @@
     return typeof value === "number" && isFinite(value);
   }
 
+  var DASH = "\u2014";
+
   function defaultFormat(value) {
     if (!isNum(value)) {
-      return "\u2014";
+      return DASH;
     }
     var av = Math.abs(value);
     if (av >= 1000) {
@@ -36,8 +39,6 @@
     }
     return String(Math.round(value * 10000) / 10000);
   }
-
-  var DASH = "\u2014";
 
   /* Integer with thousands separators. */
   function formatInt(value) {
@@ -121,18 +122,17 @@
     return detail ? head + " (" + detail + ")" : head;
   }
 
-  function open(title, width, height) {
+  function open(title, width, height, desc) {
     return (
       '<svg xmlns="http://www.w3.org/2000/svg" class="chart" viewBox="0 0 ' +
       width +
       " " +
       height +
-      '" width="100%" height="' +
-      height +
-      '" role="img" preserveAspectRatio="xMidYMid meet">' +
+      '" width="100%" role="img" preserveAspectRatio="xMidYMid meet">' +
       "<title>" +
       esc(title || "Chart") +
-      "</title>"
+      "</title>" +
+      (desc ? "<desc>" + esc(desc) + "</desc>" : "")
     );
   }
 
@@ -153,7 +153,7 @@
     );
   }
 
-  /* Horizontal bars with an optional error bar from ci_low to ci_high. */
+  /* Horizontal bars with an optional interval whisker from ci_low to ci_high. */
   function barChart(rows, opts) {
     rows = rows || [];
     opts = opts || {};
@@ -164,6 +164,7 @@
     var top = 8;
     var bottom = 8;
     var format = opts.format || defaultFormat;
+    var barFill = opts.fill || "var(--accent)";
 
     var maxLabel = 0;
     for (var i = 0; i < rows.length; i += 1) {
@@ -190,7 +191,7 @@
     }
     var scale = plotW / maxValue;
 
-    var out = open(opts.title || "Bar chart", width, height);
+    var out = open(opts.title || "Bar chart", width, height, opts.desc);
     out +=
       '<line x1="' +
       plotX +
@@ -200,7 +201,7 @@
       plotX +
       '" y2="' +
       (height - bottom) +
-      '" stroke="var(--rule)" stroke-width="1" />';
+      '" stroke="var(--border)" stroke-width="1" />';
 
     for (var k = 0; k < rows.length; k += 1) {
       var r = rows[k];
@@ -219,7 +220,9 @@
         barW.toFixed(2) +
         '" height="' +
         rowHeight +
-        '" rx="3" fill="var(--accent)" class="chart-bar" />';
+        '" rx="3" fill="' +
+        barFill +
+        '" class="chart-bar" />';
 
       if (isNum(r.ci_low) || isNum(r.ci_high)) {
         var low = isNum(r.ci_low) ? r.ci_low : value;
@@ -235,7 +238,7 @@
           x2.toFixed(2) +
           '" y2="' +
           cy +
-          '" stroke="var(--accent-2)" stroke-width="1.5" />';
+          '" stroke="var(--ink-2)" stroke-width="1.5" />';
         out +=
           '<line x1="' +
           x1.toFixed(2) +
@@ -245,7 +248,7 @@
           x1.toFixed(2) +
           '" y2="' +
           (cy + 5) +
-          '" stroke="var(--accent-2)" stroke-width="1.5" />';
+          '" stroke="var(--ink-2)" stroke-width="1.5" />';
         out +=
           '<line x1="' +
           x2.toFixed(2) +
@@ -255,7 +258,7 @@
           x2.toFixed(2) +
           '" y2="' +
           (cy + 5) +
-          '" stroke="var(--accent-2)" stroke-width="1.5" />';
+          '" stroke="var(--ink-2)" stroke-width="1.5" />';
       }
 
       out += text(width - 6, cy, format(r.value), "chart-value", "end", ' dy="0.35em"');
@@ -264,15 +267,15 @@
     return out + "</svg>";
   }
 
-  /* Horizontal bars around a zero baseline, with error bars. Positive values
-   * grow right, negative values grow left. */
+  /* Horizontal bars around a zero baseline, with interval whiskers. Positive
+   * values grow right, negative values grow left and take the lost colour. */
   function divergingBarChart(rows, opts) {
     rows = rows || [];
     opts = opts || {};
     var width = opts.width || 680;
-    var rowHeight = opts.rowHeight || 26;
-    var gap = opts.gap || 12;
-    var valueWidth = opts.valueWidth || 90;
+    var rowHeight = opts.rowHeight || 30;
+    var gap = opts.gap || 16;
+    var valueWidth = opts.valueWidth || 96;
     var top = 8;
     var bottom = 8;
     var format = opts.format || defaultFormat;
@@ -281,7 +284,7 @@
     for (var i = 0; i < rows.length; i += 1) {
       maxLabel = Math.max(maxLabel, String(rows[i].label || "").length);
     }
-    var labelWidth = opts.labelWidth || Math.min(width * 0.42, maxLabel * 7 + 14);
+    var labelWidth = opts.labelWidth || Math.min(width * 0.4, maxLabel * 7 + 14);
     labelWidth = Math.max(72, labelWidth);
 
     var plotX = labelWidth;
@@ -314,7 +317,7 @@
     }
     var zeroX = px(0);
 
-    var out = open(opts.title || "Diverging bar chart", width, height);
+    var out = open(opts.title || "Diverging bar chart", width, height, opts.desc);
     out +=
       '<line x1="' +
       zeroX.toFixed(2) +
@@ -324,7 +327,7 @@
       zeroX.toFixed(2) +
       '" y2="' +
       (height - bottom) +
-      '" stroke="var(--rule)" stroke-width="1" />';
+      '" stroke="var(--border)" stroke-width="1" />';
 
     for (var k = 0; k < rows.length; k += 1) {
       var r = rows[k];
@@ -334,6 +337,7 @@
       var valueX = px(value);
       var x = Math.min(zeroX, valueX);
       var barW = Math.max(1, Math.abs(valueX - zeroX));
+      var fill = value < 0 ? "var(--lost)" : "var(--accent)";
 
       out += text(labelWidth - 10, cy, r.label, "chart-label", "end", ' dy="0.35em"');
       out +=
@@ -345,7 +349,9 @@
         barW.toFixed(2) +
         '" height="' +
         rowHeight +
-        '" rx="3" fill="var(--accent)" class="chart-bar" />';
+        '" rx="3" fill="' +
+        fill +
+        '" class="chart-bar" />';
 
       if (isNum(r.ci_low) || isNum(r.ci_high)) {
         var low = isNum(r.ci_low) ? r.ci_low : value;
@@ -361,7 +367,7 @@
           x2.toFixed(2) +
           '" y2="' +
           cy +
-          '" stroke="var(--accent-2)" stroke-width="1.5" />';
+          '" stroke="var(--ink-2)" stroke-width="1.5" />';
         out +=
           '<line x1="' +
           x1.toFixed(2) +
@@ -371,7 +377,7 @@
           x1.toFixed(2) +
           '" y2="' +
           (cy + 5) +
-          '" stroke="var(--accent-2)" stroke-width="1.5" />';
+          '" stroke="var(--ink-2)" stroke-width="1.5" />';
         out +=
           '<line x1="' +
           x2.toFixed(2) +
@@ -381,7 +387,7 @@
           x2.toFixed(2) +
           '" y2="' +
           (cy + 5) +
-          '" stroke="var(--accent-2)" stroke-width="1.5" />';
+          '" stroke="var(--ink-2)" stroke-width="1.5" />';
       }
 
       out += text(width - 6, cy, format(r.value), "chart-value", "end", ' dy="0.35em"');
@@ -398,13 +404,13 @@
     var height = opts.height || 280;
     var padLeft = opts.padLeft || 72;
     var padRight = 40;
-    var padTop = opts.padTop || 18;
+    var padTop = opts.padTop || 30;
     var padBottom = 42;
     var plotW = width - padLeft - padRight;
     var plotH = height - padTop - padBottom;
     var xLabels = opts.xLabels || [];
     var band = opts.band || null;
-    var colors = opts.colors || ["var(--accent)", "var(--accent-2)", "var(--ink)"];
+    var colors = opts.colors || ["var(--accent)", "var(--ink-3)", "var(--lost)"];
 
     var n = 0;
     for (var s = 0; s < series.length; s += 1) {
@@ -458,7 +464,7 @@
       return padTop + plotH * (1 - (v - lo) / span);
     }
 
-    var out = open(opts.title || "Line chart", width, height);
+    var out = open(opts.title || "Line chart", width, height, opts.desc);
 
     var ticks = 4;
     var format = opts.format || defaultFormat;
@@ -474,7 +480,7 @@
         (width - padRight) +
         '" y2="' +
         ty.toFixed(2) +
-        '" stroke="var(--rule)" stroke-width="1" />';
+        '" stroke="var(--border)" stroke-width="1" />';
       out += text(padLeft - 8, ty, format(tv), "chart-label", "end", ' dy="0.35em"');
     }
 
@@ -514,6 +520,18 @@
           colors[sj % colors.length] +
           '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />';
       }
+      for (var di = 0; di < values.length; di += 1) {
+        if (isNum(values[di])) {
+          out +=
+            '<circle cx="' +
+            px(di).toFixed(2) +
+            '" cy="' +
+            py(values[di]).toFixed(2) +
+            '" r="2.5" fill="' +
+            colors[sj % colors.length] +
+            '" />';
+        }
+      }
     }
 
     var labelStep = Math.max(1, Math.ceil(xLabels.length / 8));
@@ -536,16 +554,16 @@
         '<line x1="' +
         legendX +
         '" y1="' +
-        (padTop - 6) +
+        (padTop - 12) +
         '" x2="' +
         (legendX + 16) +
         '" y2="' +
-        (padTop - 6) +
+        (padTop - 12) +
         '" stroke="' +
         colors[lj % colors.length] +
         '" stroke-width="2" />';
-      out += text(legendX + 22, padTop - 6, name, "chart-label", "start", ' dy="0.35em"');
-      legendX += 24 + String(name).length * 7;
+      out += text(legendX + 22, padTop - 12, name, "chart-label", "start", ' dy="0.35em"');
+      legendX += 30 + String(name).length * 7;
     }
 
     return out + "</svg>";
@@ -558,7 +576,7 @@
     colLabels = colLabels || [];
     opts = opts || {};
     var cell = opts.cell || 34;
-    var topH = 20;
+    var topH = 22;
     var format = opts.format || defaultFormat;
     var rows = rowLabels.length;
     var cols = colLabels.length;
@@ -585,12 +603,12 @@
       maxValue = 1;
     }
 
-    var out = open(opts.title || "Heatmap", width, height);
+    var out = open(opts.title || "Heatmap", width, height, opts.desc);
 
     for (var c = 0; c < cols; c += 1) {
       out += text(
         leftW + c * cell + cell / 2,
-        topH - 6,
+        topH - 8,
         colLabels[c],
         "chart-label",
         "middle"
@@ -612,7 +630,7 @@
         var y = topH + ri * cell;
         if (isNum(value)) {
           var ratio = Math.max(0, Math.min(1, value / maxValue));
-          var opacity = (0.06 + 0.74 * ratio).toFixed(3);
+          var step = Math.min(5, Math.round(ratio * 5));
           out +=
             '<rect x="' +
             x +
@@ -622,18 +640,16 @@
             (cell - 2) +
             '" height="' +
             (cell - 2) +
-            '" rx="3" fill="var(--accent)" fill-opacity="' +
-            opacity +
-            '" />';
+            '" rx="3" fill="var(--heat-' +
+            step +
+            ')" />';
           out += text(
             x + (cell - 2) / 2,
             y + (cell - 2) / 2,
             format(value),
-            "chart-cell",
+            "chart-cell heat-ink-" + step,
             "middle",
-            ' dy="0.35em" fill="' +
-              (ratio > 0.6 ? "var(--surface)" : "var(--ink)") +
-              '"'
+            ' dy="0.35em"'
           );
         } else {
           out +=
@@ -645,14 +661,14 @@
             (cell - 2) +
             '" height="' +
             (cell - 2) +
-            '" rx="3" fill="var(--rule)" fill-opacity="0.5" />';
+            '" rx="3" fill="var(--surface-2)" />';
           out += text(
             x + (cell - 2) / 2,
             y + (cell - 2) / 2,
-            "\u2014",
+            DASH,
             "chart-cell",
             "middle",
-            ' dy="0.35em" fill="var(--muted)"'
+            ' dy="0.35em"'
           );
         }
       }
@@ -661,38 +677,42 @@
     return out + "</svg>";
   }
 
-  /* Funnel bars shrinking by step, with counts and step-to-step rates. */
-  function funnelChart(steps, opts) {
-    steps = steps || [];
+  /* Closed and open funnel counts as two aligned bar series per step. */
+  function pairedStepChart(rows, opts) {
+    rows = rows || [];
     opts = opts || {};
     var width = opts.width || 680;
-    var rowHeight = opts.rowHeight || 26;
-    var gap = opts.gap || 22;
-    var countWidth = opts.countWidth || 110;
-    var top = 8;
+    var rowHeight = opts.rowHeight || 30;
+    var gap = opts.gap || 20;
+    var valueWidth = opts.valueWidth || 96;
+    var top = 10;
+    var bottom = 10;
     var format = opts.format || defaultFormat;
 
     var maxLabel = 0;
-    for (var i = 0; i < steps.length; i += 1) {
-      maxLabel = Math.max(maxLabel, String(steps[i].label || "").length);
+    for (var i = 0; i < rows.length; i += 1) {
+      maxLabel = Math.max(maxLabel, String(rows[i].label || "").length);
     }
-    var labelWidth = opts.labelWidth || Math.min(width * 0.4, maxLabel * 7 + 14);
+    var labelWidth = opts.labelWidth || Math.min(width * 0.34, maxLabel * 7 + 14);
     labelWidth = Math.max(80, labelWidth);
 
     var plotX = labelWidth;
-    var plotRight = width - countWidth;
+    var plotRight = width - valueWidth;
     var plotW = Math.max(10, plotRight - plotX);
-    var height = top + Math.max(0, steps.length * (rowHeight + gap) - gap) + 8;
+    var pairH = 12;
+    var pairGap = 4;
+    var height = top + rows.length * (rowHeight + gap) - gap + bottom;
 
-    var maxCount = 0;
-    for (var j = 0; j < steps.length; j += 1) {
-      maxCount = Math.max(maxCount, steps[j].count || 0);
+    var maxValue = 0;
+    for (var j = 0; j < rows.length; j += 1) {
+      maxValue = Math.max(maxValue, rows[j].closed || 0, rows[j].open || 0);
     }
-    if (!(maxCount > 0)) {
-      maxCount = 1;
+    if (!(maxValue > 0)) {
+      maxValue = 1;
     }
+    var scale = plotW / maxValue;
 
-    var out = open(opts.title || "Funnel", width, height);
+    var out = open(opts.title || "Closed and open funnel", width, height, opts.desc);
     out +=
       '<line x1="' +
       plotX +
@@ -701,45 +721,234 @@
       '" x2="' +
       plotX +
       '" y2="' +
-      (height - 8) +
-      '" stroke="var(--rule)" stroke-width="1" />';
+      (height - bottom) +
+      '" stroke="var(--border)" stroke-width="1" />';
 
-    for (var k = 0; k < steps.length; k += 1) {
-      var step = steps[k];
+    for (var k = 0; k < rows.length; k += 1) {
+      var r = rows[k];
       var y = top + k * (rowHeight + gap);
-      var cy = y + rowHeight / 2;
-      var count = step.count || 0;
-      var barW = Math.max(1, (count / maxCount) * plotW);
-
-      out += text(labelWidth - 10, cy, step.label, "chart-label", "end", ' dy="0.35em"');
+      var closedW = Math.max(1, (r.closed || 0) * scale);
+      var openW = Math.max(1, (r.open || 0) * scale);
+      out += text(labelWidth - 10, y + rowHeight / 2, r.label, "chart-label", "end", ' dy="0.35em"');
       out +=
         '<rect x="' +
         plotX +
         '" y="' +
         y +
         '" width="' +
+        closedW.toFixed(2) +
+        '" height="' +
+        pairH +
+        '" rx="2" fill="var(--accent)" />';
+      out +=
+        '<rect x="' +
+        plotX +
+        '" y="' +
+        (y + pairH + pairGap) +
+        '" width="' +
+        openW.toFixed(2) +
+        '" height="' +
+        pairH +
+        '" rx="2" fill="var(--accent-soft-strong)" />';
+      out += text(plotX + Math.max(closedW, openW) + 8, y + rowHeight / 2, format(r.closed), "chart-value", "start", ' dy="0.35em"');
+    }
+
+    out +=
+      '<line x1="' +
+      plotX +
+      '" y1="' +
+      (height - bottom + 2) +
+      '" x2="' +
+      plotX +
+      '" y2="' +
+      (height - bottom + 2) +
+      '" stroke="none" />';
+    out += text(plotX, height - 2, "\u25A0 closed (needs every earlier step)", "chart-label", "start");
+    out += text(plotX + 250, height - 2, "\u25A0 open (step event present)", "chart-label", "start");
+    return out + "</svg>";
+  }
+
+  /* A waterfall from one revenue figure to the next. */
+  function bridgeChart(spec, opts) {
+    opts = opts || {};
+    spec = spec || {};
+    var steps = spec.steps || [];
+    var start = spec.start || {};
+    var end = spec.end || {};
+    var format = opts.format || defaultFormat;
+    var width = opts.width || 680;
+    var rowHeight = opts.rowHeight || 30;
+    var gap = opts.gap || 16;
+    var labelWidth = opts.labelWidth || 150;
+    var valueWidth = opts.valueWidth || 96;
+    var top = 8;
+    var bottom = 8;
+
+    var rows = [{ label: start.label, from: 0, to: start.value, kind: "total" }];
+    var cum = isNum(start.value) ? start.value : 0;
+    for (var i = 0; i < steps.length; i += 1) {
+      var s = steps[i];
+      var delta = isNum(s.delta) ? s.delta : 0;
+      rows.push({ label: s.label, from: cum, to: cum + delta, kind: delta < 0 ? "fall" : "rise", delta: delta });
+      cum += delta;
+    }
+    rows.push({ label: end.label, from: 0, to: cum, kind: "total" });
+
+    var plotX = labelWidth;
+    var plotRight = width - valueWidth;
+    var plotW = Math.max(10, plotRight - plotX);
+    var height = top + rows.length * (rowHeight + gap) - gap + bottom;
+
+    var maxValue = 0;
+    for (var j = 0; j < rows.length; j += 1) {
+      maxValue = Math.max(maxValue, rows[j].from || 0, rows[j].to || 0);
+    }
+    if (!(maxValue > 0)) {
+      maxValue = 1;
+    }
+    var scale = plotW / maxValue;
+
+    var out = open(opts.title || "Revenue bridge", width, height, opts.desc);
+
+    for (var k = 0; k < rows.length; k += 1) {
+      var r = rows[k];
+      var y = top + k * (rowHeight + gap);
+      var x0 = plotX + Math.min(r.from, r.to) * scale;
+      var x1 = plotX + Math.max(r.from, r.to) * scale;
+      var barW = Math.max(2, x1 - x0);
+      var fill =
+        r.kind === "total" ? "var(--accent)" : r.kind === "fall" ? "var(--lost)" : "var(--accent)";
+
+      out += text(labelWidth - 12, y + rowHeight / 2, r.label, "chart-label", "end", ' dy="0.35em"');
+      out +=
+        '<rect class="bridge-bar" style="--i:' +
+        k +
+        '" x="' +
+        x0.toFixed(2) +
+        '" y="' +
+        y +
+        '" width="' +
         barW.toFixed(2) +
         '" height="' +
         rowHeight +
-        '" rx="3" fill="var(--accent)" class="chart-bar" />';
-      out += text(plotX + barW + 8, cy, format(count), "chart-value", "start", ' dy="0.35em"');
+        '" rx="3" fill="' +
+        fill +
+        '" />';
 
-      if (k > 0) {
-        var prev = steps[k - 1].count || 0;
-        var rate = prev > 0 ? count / prev : NaN;
-        var rateText = isNum(rate)
-          ? (rate * 100).toFixed(1) + "% of previous step"
-          : "no previous step";
-        out += text(
-          plotX,
-          y - gap / 2 + 4,
-          "\u2193 " + rateText,
-          "chart-label",
-          "start"
-        );
+      if (r.kind !== "total" && isNum(r.delta)) {
+        var labelX = r.delta < 0 ? x0 - 6 : x1 + 6;
+        var anchor = r.delta < 0 ? "end" : "start";
+        out += text(labelX, y + rowHeight / 2, (r.delta < 0 ? "" : "+") + format(r.delta), "chart-value", anchor, ' dy="0.35em"');
+      } else {
+        out += text(width - 6, y + rowHeight / 2, format(r.to), "chart-value", "end", ' dy="0.35em"');
+      }
+
+      if (k < rows.length - 1) {
+        var next = rows[k + 1];
+        var linkY = y + rowHeight;
+        var linkX = plotX + (r.kind === "total" ? r.to : r.to) * scale;
+        out +=
+          '<line x1="' +
+          linkX.toFixed(2) +
+          '" y1="' +
+          linkY +
+          '" x2="' +
+          linkX.toFixed(2) +
+          '" y2="' +
+          (next.kind === "total" ? linkY + gap + (next.from === 0 ? rowHeight : 0) : linkY + gap) +
+          '" stroke="var(--border)" stroke-width="1" />';
       }
     }
 
+    return out + "</svg>";
+  }
+
+  /* Small inline bar sparkline for finding cards. */
+  function sparkBars(values, opts) {
+    values = values || [];
+    opts = opts || {};
+    var width = opts.width || 150;
+    var height = opts.height || 44;
+    var pad = 3;
+    var n = values.length || 1;
+    var maxValue = 0;
+    for (var i = 0; i < values.length; i += 1) {
+      if (isNum(values[i])) {
+        maxValue = Math.max(maxValue, values[i]);
+      }
+    }
+    if (!(maxValue > 0)) {
+      maxValue = 1;
+    }
+    var slot = (width - pad * 2) / n;
+    var barW = Math.max(2, slot - 2);
+    var out = open(opts.title || "Sparkline", width, height, opts.desc);
+    for (var j = 0; j < values.length; j += 1) {
+      if (!isNum(values[j])) {
+        continue;
+      }
+      var h = Math.max(1, (values[j] / maxValue) * (height - pad * 2));
+      var x = pad + j * slot;
+      var fill = opts.highlight === j ? "var(--accent)" : "var(--accent-soft-strong)";
+      out +=
+        '<rect x="' +
+        x.toFixed(2) +
+        '" y="' +
+        (height - pad - h).toFixed(2) +
+        '" width="' +
+        barW.toFixed(2) +
+        '" height="' +
+        h.toFixed(2) +
+        '" rx="2" fill="' +
+        fill +
+        '" />';
+    }
+    return out + "</svg>";
+  }
+
+  /* Small inline line sparkline for finding cards. */
+  function sparkLine(values, opts) {
+    values = values || [];
+    opts = opts || {};
+    var width = opts.width || 150;
+    var height = opts.height || 44;
+    var pad = 4;
+    var n = values.length;
+    if (!n) {
+      return open(opts.title || "Sparkline", width, height, opts.desc) + "</svg>";
+    }
+    var lo = Infinity;
+    var hi = -Infinity;
+    for (var i = 0; i < n; i += 1) {
+      if (isNum(values[i])) {
+        lo = Math.min(lo, values[i]);
+        hi = Math.max(hi, values[i]);
+      }
+    }
+    if (!isFinite(lo) || !isFinite(hi)) {
+      lo = 0;
+      hi = 1;
+    }
+    if (lo === hi) {
+      hi = lo + 1;
+    }
+    function px(i) {
+      return pad + (n === 1 ? (width - pad * 2) / 2 : (i * (width - pad * 2)) / (n - 1));
+    }
+    function py(v) {
+      return pad + (height - pad * 2) * (1 - (v - lo) / (hi - lo));
+    }
+    var points = [];
+    for (var j = 0; j < n; j += 1) {
+      if (isNum(values[j])) {
+        points.push(px(j).toFixed(2) + "," + py(values[j]).toFixed(2));
+      }
+    }
+    var out = open(opts.title || "Sparkline", width, height, opts.desc);
+    out +=
+      '<polyline points="' +
+      points.join(" ") +
+      '" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />';
     return out + "</svg>";
   }
 
@@ -748,7 +957,10 @@
     divergingBarChart: divergingBarChart,
     lineChart: lineChart,
     heatmap: heatmap,
-    funnelChart: funnelChart,
+    pairedStepChart: pairedStepChart,
+    bridgeChart: bridgeChart,
+    sparkBars: sparkBars,
+    sparkLine: sparkLine,
     formatInt: formatInt,
     formatPct: formatPct,
     formatMoney: formatMoney,

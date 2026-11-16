@@ -1,93 +1,86 @@
-/* Theme switch for Buyer Analytics.
+/* Theme control for Buyer Analytics.
  *
- * Runs in <head> so a stored choice is applied before first paint. The choice
- * is remembered in localStorage inside try/catch; with nothing stored the page
- * follows the system preference via the CSS media query.
+ * Three states: follow the system, force light, force dark. The choice is
+ * stored in localStorage inside try/catch so private mode never throws. This
+ * file runs from <head>, so the stored choice is applied before first paint and
+ * the "js" class is added while the document is still parsing.
  */
 (function () {
   "use strict";
 
   var STORAGE_KEY = "buyer-analytics-theme";
+  var ORDER = ["system", "light", "dark"];
+  var LABELS = { system: "System", light: "Light", dark: "Dark" };
   var root = document.documentElement;
+
+  /* A class the CSS can key on, so no-JS users never see reveal animations. */
+  root.classList.add("js");
 
   function readStored() {
     try {
       var value = window.localStorage.getItem(STORAGE_KEY);
-      if (value === "light" || value === "dark") {
+      if (value === "system" || value === "light" || value === "dark") {
         return value;
       }
     } catch (err) {
       /* storage unavailable; fall back to the system preference */
     }
-    return null;
+    return "system";
   }
 
-  function systemTheme() {
-    if (
-      window.matchMedia &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches
-    ) {
-      return "dark";
-    }
-    return "light";
-  }
-
-  function effectiveTheme() {
-    return root.getAttribute("data-theme") || systemTheme();
-  }
-
-  function apply(theme) {
-    if (theme === "light" || theme === "dark") {
-      root.setAttribute("data-theme", theme);
+  function apply(mode) {
+    if (mode === "light" || mode === "dark") {
+      root.setAttribute("data-theme", mode);
     } else {
       root.removeAttribute("data-theme");
     }
   }
 
-  function remember(theme) {
+  function remember(mode) {
     try {
-      window.localStorage.setItem(STORAGE_KEY, theme);
+      window.localStorage.setItem(STORAGE_KEY, mode);
     } catch (err) {
       /* ignore storage failures */
     }
   }
 
-  function updateButton(button) {
+  function updateButton(button, mode) {
     if (!button) {
       return;
     }
-    var dark = effectiveTheme() === "dark";
-    var label = dark ? "Switch to light theme" : "Switch to dark theme";
-    button.setAttribute("aria-pressed", dark ? "true" : "false");
+    var next = ORDER[(ORDER.indexOf(mode) + 1) % ORDER.length];
+    var label =
+      "Theme: " + LABELS[mode] + ". Activate to switch to " + LABELS[next] + ".";
     button.setAttribute("aria-label", label);
     button.setAttribute("title", label);
+    button.setAttribute("data-mode", mode);
     var text = button.querySelector("[data-theme-label]");
     if (text) {
-      text.textContent = dark ? "Light" : "Dark";
+      text.textContent = LABELS[mode];
     }
   }
 
-  /* Apply any stored choice as early as possible. */
-  apply(readStored());
+  var mode = readStored();
+  apply(mode);
 
   document.addEventListener("DOMContentLoaded", function () {
     var button = document.getElementById("theme-toggle");
-    updateButton(button);
+    updateButton(button, mode);
 
     if (button) {
       button.addEventListener("click", function () {
-        var next = effectiveTheme() === "dark" ? "light" : "dark";
-        apply(next);
-        remember(next);
-        updateButton(button);
+        mode = ORDER[(ORDER.indexOf(mode) + 1) % ORDER.length];
+        apply(mode);
+        remember(mode);
+        updateButton(button, mode);
       });
     }
 
     if (window.matchMedia) {
       var query = window.matchMedia("(prefers-color-scheme: dark)");
       var onChange = function () {
-        if (!readStored()) {
-          updateButton(button);
+        if (mode === "system") {
+          updateButton(button, mode);
         }
       };
       if (query.addEventListener) {

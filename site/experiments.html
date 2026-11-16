@@ -3,10 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
     <title>Experiments · Buyer Analytics</title>
     <meta
       name="description"
-      content="Whether the A/B-testing engine behaves the way theory says it should on this traffic."
+      content="A method check on real traffic: peeking, calibration and power, with every effect planted."
     />
     <link rel="stylesheet" href="css/style.css" />
     <script src="js/theme.js"></script>
@@ -15,8 +16,20 @@
     <a class="skip-link" href="#content">Skip to content</a>
     <header class="site-header">
       <div class="wrap header-inner">
-        <a class="brand" href="index.html">Buyer Analytics</a>
-        <nav class="site-nav" aria-label="Primary">
+        <a class="brand" href="index.html"
+          ><span class="brand-text">Buyer Analytics</span></a
+        >
+        <button
+          class="nav-toggle"
+          type="button"
+          data-nav-toggle
+          aria-expanded="false"
+          aria-controls="site-nav"
+        >
+          <span class="nav-toggle-bars" aria-hidden="true"></span>
+          <span>Menu</span>
+        </button>
+        <nav id="site-nav" class="site-nav" aria-label="Primary">
           <a href="index.html">Overview</a>
           <a href="funnel.html">Funnel</a>
           <a href="cohorts.html">Cohorts</a>
@@ -30,10 +43,10 @@
             id="theme-toggle"
             class="theme-toggle"
             type="button"
-            aria-pressed="false"
+            data-mode="system"
           >
             <span class="theme-toggle-icon" aria-hidden="true"></span>
-            <span data-theme-label>Dark</span>
+            <span data-theme-label>System</span>
           </button>
           <span class="author">Medhansh Shekhawat</span>
           <a href="https://github.com/Ghostboy789/buyer-analytics">GitHub</a>
@@ -42,31 +55,28 @@
       </div>
     </header>
 
-    <div class="wrap">
-      <header class="page-head">
-        <p class="eyebrow">Method check</p>
-        <h1>Experiments</h1>
-        <p class="lede">
-          Does the A/B-testing engine behave the way theory says it should on
-          this traffic?
-        </p>
-      </header>
-
-      <main id="content" data-page="experiments">
-        <p class="placeholder">Data not loaded yet.</p>
-      </main>
-    </div>
+    <main id="content" data-page="experiments"></main>
 
     <footer class="site-footer">
-      <div class="wrap">
-        <p>
-          Buyer Analytics &mdash; analysis of the public GA4 Merchandise Store
-          sample.
-        </p>
-      </div>
+      <div class="wrap" id="footer-slot"></div>
     </footer>
+
+    <div
+      class="glossary-pop"
+      id="glossary-pop"
+      role="dialog"
+      aria-label="Glossary definition"
+      hidden
+    >
+      <p class="glossary-term" data-glossary-term></p>
+      <p class="glossary-def" data-glossary-def></p>
+    </div>
+
     <script src="js/charts.js"></script>
+    <script src="js/glossary.js"></script>
     <script src="js/pages.js"></script>
+    <script src="js/hero.js"></script>
+    <script src="js/site.js"></script>
     <script>
       Pages.mount();
     </script>

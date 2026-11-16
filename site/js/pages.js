@@ -2,8 +2,9 @@
  *
  * One function per page. Each takes the parsed JSON artefact(s) and returns an
  * HTML string; nothing touches the DOM, so the functions can be called from
- * Node for testing. Chart and number formatting come from charts.js, which is
- * loaded either from the page (window.Charts) or with require() under Node.
+ * Node for testing. Chart and number formatting come from charts.js and the
+ * glossary from glossary.js, both loaded either from the page (window.*) or
+ * with require() under Node.
  */
 (function (global) {
   "use strict";
@@ -12,8 +13,22 @@
     typeof module !== "undefined" && module.exports
       ? require("./charts.js")
       : global.Charts;
+  var G =
+    typeof module !== "undefined" && module.exports
+      ? require("./glossary.js")
+      : global.Glossary;
 
   var DASH = "\u2014";
+
+  var STORY = [
+    { page: "index", label: "Overview" },
+    { page: "funnel", label: "Funnel" },
+    { page: "cohorts", label: "Cohorts" },
+    { page: "revenue", label: "Revenue" },
+    { page: "experiments", label: "Experiments" },
+    { page: "quality", label: "Data quality" },
+    { page: "lab", label: "Experiment lab" }
+  ];
 
   function esc(value) {
     return C.escape(value);
@@ -23,10 +38,33 @@
     return typeof value === "number" && isFinite(value);
   }
 
-  function section(title, body) {
+  function pct(value) {
+    return C.formatPct(value);
+  }
+
+  /* A glossary term: a real button that drives one shared popover. */
+  function term(key, label) {
     return (
-      '<section class="section">' +
-      (title ? "<h2>" + esc(title) + "</h2>" : "") +
+      '<button type="button" class="term" data-term="' +
+      esc(key) +
+      '" aria-expanded="false" aria-controls="glossary-pop" aria-describedby="glossary-pop">' +
+      esc(label) +
+      "</button>"
+    );
+  }
+
+  function note(text) {
+    return '<p class="note">' + text + "</p>";
+  }
+
+  function section(id, title, body, extraClass) {
+    return (
+      '<section class="section ' +
+      (extraClass || "") +
+      '"' +
+      (id ? ' id="' + esc(id) + '"' : "") +
+      ">" +
+      (title ? '<h2 class="section-head">' + title + "</h2>" : "") +
       body +
       "</section>"
     );
@@ -34,29 +72,50 @@
 
   function details(summary, body) {
     return (
-      '<details class="data-toggle"><summary>' + esc(summary) + "</summary>" + body + "</details>"
+      '<details class="data-toggle"><summary>' +
+      esc(summary) +
+      "</summary>" +
+      body +
+      "</details>"
     );
   }
 
-  function card(title, body) {
+  function card(title, body, extraClass) {
     return (
-      '<section class="card">' +
-      (title ? "<h2>" + esc(title) + "</h2>" : "") +
+      '<section class="card ' +
+      (extraClass || "") +
+      '">' +
+      (title ? '<h3 class="card-title">' + title + "</h3>" : "") +
       body +
       "</section>"
     );
   }
 
-  function table(headers, rows) {
-    var out = '<div class="table-wrap"><table><thead><tr>';
+  function chartCard(title, chart, meaning, table) {
+    return card(
+      title,
+      '<div class="chart-wrap">' +
+        chart +
+        "</div>" +
+        (meaning ? '<p class="meaning"><span class="meaning-label">What this means</span> ' + meaning + "</p>" : "") +
+        (table ? details("Exact numbers", table) : "")
+    );
+  }
+
+  function table(headers, rows, opts) {
+    opts = opts || {};
+    var out = '<div class="table-wrap"><table' + (opts.cls ? ' class="' + opts.cls + '"' : "") + "><thead><tr>";
     for (var h = 0; h < headers.length; h += 1) {
-      out += '<th' + (h > 0 ? ' class="num"' : "") + ">" + esc(headers[h]) + "</th>";
+      out += '<th scope="col"' + (h > 0 ? ' class="num"' : "") + ">" + esc(headers[h]) + "</th>";
     }
     out += "</tr></thead><tbody>";
     for (var r = 0; r < rows.length; r += 1) {
       out += "<tr>";
       for (var c = 0; c < rows[r].length; c += 1) {
-        out += '<td' + (c > 0 ? ' class="num"' : "") + ">" + rows[r][c] + "</td>";
+        out +=
+          (c === 0 ? '<th scope="row">' : '<td class="num">') +
+          rows[r][c] +
+          (c === 0 ? "</th>" : "</td>");
       }
       out += "</tr>";
     }
@@ -75,15 +134,63 @@
     );
   }
 
-  function kpi(label, value, sub) {
+  function intervalBar(num, kind) {
+    if (!num || !isNum(num.ci_low) || !isNum(num.ci_high)) {
+      return "";
+    }
+    var lo = Math.min(num.ci_low, 0);
+    var hi = Math.max(num.ci_high, num.value) * 1.08;
+    var span = hi - lo || 1;
+    function clamp(v) {
+      return Math.max(0, Math.min(100, v));
+    }
+    var left = clamp(((num.ci_low - lo) / span) * 100);
+    var width = clamp(((num.ci_high - num.ci_low) / span) * 100);
+    var dot = clamp(((num.value - lo) / span) * 100);
+    var label =
+      "Estimate " +
+      C.formatValue(num.value, kind) +
+      ". 95% interval " +
+      C.formatValue(num.ci_low, kind) +
+      " to " +
+      C.formatValue(num.ci_high, kind) +
+      ". n equals " +
+      C.formatInt(num.n) +
+      ".";
+    return (
+      '<div class="ivbar" role="img" aria-label="' +
+      esc(label) +
+      '"><span class="ivbar-track"></span><span class="ivbar-range" style="left:' +
+      left.toFixed(2) +
+      "%;width:" +
+      width.toFixed(2) +
+      '%"></span><span class="ivbar-dot" style="left:' +
+      dot.toFixed(2) +
+      '%"></span></div>'
+    );
+  }
+
+  function kpiEstimate(label, num, kind) {
+    return (
+      '<div class="kpi"><div class="kpi-label">' +
+      esc(label) +
+      '</div><div class="kpi-value">' +
+      C.formatValue(num.value, kind) +
+      "</div>" +
+      intervalBar(num, kind) +
+      '<div class="kpi-ci">' +
+      esc(C.numDetail(num, kind)) +
+      "</div></div>"
+    );
+  }
+
+  function kpiExact(label, value) {
     return (
       '<div class="kpi"><div class="kpi-label">' +
       esc(label) +
       '</div><div class="kpi-value">' +
       value +
-      "</div>" +
-      (sub ? '<div class="kpi-sub">' + sub + "</div>" : "") +
-      "</div>"
+      '</div><div class="kpi-ci">exact count</div></div>'
     );
   }
 
@@ -91,9 +198,25 @@
     return (
       '<span class="badge ' +
       (ok ? "badge-pass" : "badge-fail") +
-      '">' +
+      '"><span class="badge-dot" aria-hidden="true"></span>' +
       (ok ? "PASS" : "FAIL") +
       "</span>"
+    );
+  }
+
+  function bigStat(label, num, kind, sub) {
+    return (
+      '<div class="bigstat"><div class="bigstat-label">' +
+      esc(label) +
+      '</div><div class="bigstat-value">' +
+      C.formatValue(num.value, kind) +
+      "</div>" +
+      intervalBar(num, kind) +
+      '<div class="bigstat-ci">' +
+      esc(C.numDetail(num, kind)) +
+      "</div>" +
+      (sub ? '<div class="bigstat-sub">' + sub + "</div>" : "") +
+      "</div>"
     );
   }
 
@@ -107,6 +230,10 @@
     return String(metric).split("_").join(" ");
   }
 
+  function prettyChannel(channel) {
+    return String(channel).split("_").join(" ");
+  }
+
   function formatP(value) {
     if (!isNum(value)) {
       return DASH;
@@ -117,66 +244,268 @@
     return value.toFixed(4);
   }
 
+  function pageHead(eyebrow, headline, look) {
+    return (
+      '<header class="page-head" data-reveal>' +
+      '<p class="eyebrow">' +
+      esc(eyebrow) +
+      '</p><h1 class="display">' +
+      headline +
+      "</h1>" +
+      (look ? '<p class="page-sub">' + look + "</p>" : "") +
+      "</header>"
+    );
+  }
+
+  function nextCard(page) {
+    var index = 0;
+    for (var i = 0; i < STORY.length; i += 1) {
+      if (STORY[i].page === page) {
+        index = i;
+      }
+    }
+    var next = STORY[(index + 1) % STORY.length];
+    return (
+      '<nav class="next-card" aria-label="Next page"><a href="' +
+      next.page +
+      '.html"><span class="next-label">Next</span><span class="next-title">' +
+      esc(next.label) +
+      '</span><span class="next-arrow" aria-hidden="true">\u2192</span></a></nav>'
+    );
+  }
+
+  function renderFooter(desc) {
+    var meta = (desc && desc.meta) || {};
+    var range =
+      meta.date_min && meta.date_max
+        ? "Data range " + esc(meta.date_min) + " to " + esc(meta.date_max) + "."
+        : "Data range unavailable.";
+    return (
+      '<div class="footer-grid">' +
+      '<p class="footer-credit">Source: the public Google Merchandise Store GA4 sample, used for non-commercial analysis. ' +
+      range +
+      "</p>" +
+      '<p class="footer-note">A &ldquo;user&rdquo; in every figure on this site is a browser cookie, not a person.</p>' +
+      '<p class="footer-link"><a href="https://github.com/Ghostboy789/buyer-analytics">Repository</a></p>' +
+      "</div>"
+    );
+  }
+
   /* ------------------------------------------------------------------ */
-  /* 1. Overview                                                         */
+  /* Overview                                                            */
   /* ------------------------------------------------------------------ */
 
-  function renderOverview(desc, decomp) {
+  function renderOverview(desc, decomp, exp) {
     var k = desc.kpis;
     var weeks = desc.weekly;
+    var f = desc.funnel;
+    var overall = f.overall;
+    var steps = f.steps;
+    var sessions = k.sessions;
+    var openPer1000 = overall.open_reached.map(function (count) {
+      return Math.round((count / sessions) * 1000);
+    });
+    var nBuy = Math.round(k.session_conversion.value * 1000);
+
+    var heroTable = table(
+      ["Funnel step", "Sessions with the event", "Per 1,000 sessions"],
+      steps.map(function (step, i) {
+        return [
+          esc(prettyStep(step)),
+          C.formatInt(overall.open_reached[i]),
+          C.formatInt(openPer1000[i])
+        ];
+      })
+    );
+
+    var hero =
+      '<section class="hero">' +
+      '<div class="hero-copy" data-reveal>' +
+      '<p class="eyebrow">Overview</p>' +
+      '<h1 class="display hero-headline">Of every 1,000 ' +
+      term("session", "sessions") +
+      ', <span class="hero-num">' +
+      nBuy +
+      "</span> buy.</h1>" +
+      '<p class="hero-sub">A ' +
+      term("conversion", "session conversion") +
+      " of " +
+      C.formatValue(k.session_conversion.value, "rate") +
+      " (95% interval " +
+      C.formatValue(k.session_conversion.ci_low, "rate") +
+      " to " +
+      C.formatValue(k.session_conversion.ci_high, "rate") +
+      ", n = " +
+      C.formatInt(k.session_conversion.n) +
+      ").</p>" +
+      '<p class="hero-look">Follow the thousand squares below: each one is one session in a thousand, sorted into the ' +
+      term("closed_funnel", "funnel") +
+      " steps. The muted squares are the ones that never reach the next step.</p>" +
+      "</div>" +
+      '<div class="hero-visual" data-reveal>' +
+      '<canvas class="hero-canvas" data-hero role="img" aria-label="A field of one thousand squares, one for every thousand sessions, sorted by how far each session got. ' +
+      nBuy +
+      ' of the thousand reach the purchase step; most never view an item." data-sessions="' +
+      sessions +
+      '" data-open="' +
+      overall.open_reached.join(",") +
+      '" data-purchase="' +
+      nBuy +
+      '"></canvas>' +
+      '<p class="hero-caption">One square is one session in a thousand. The same six numbers, as a table:</p>' +
+      heroTable +
+      "</div>" +
+      "</section>";
+
+    /* Bento: one card per finding. */
+    var channelTop = desc.channels.slice().sort(function (a, b) {
+      return b.user_conversion.value - a.user_conversion.value;
+    })[0];
+    var firstCohort = desc.cohorts[0];
+    var week1 = null;
+    firstCohort.retention.forEach(function (point) {
+      if (point.week_offset === 1) {
+        week1 = point.rate;
+      }
+    });
+    var cmp23 = null;
+    var cmp12 = null;
+    (decomp.comparisons || []).forEach(function (cmp) {
+      if (cmp.from === "P2" && cmp.to === "P3") {
+        cmp23 = cmp;
+      }
+      if (cmp.from === "P1" && cmp.to === "P2") {
+        cmp12 = cmp;
+      }
+    });
+
+    var bento = [
+      {
+        page: "funnel",
+        kicker: "Funnel",
+        title: "Most sessions stop before the cart",
+        num: C.formatPct(overall.rate_from_prev[1].value) + " of item views reach the cart",
+        chart: C.sparkBars(overall.open_reached, {
+          title: "Sessions with each funnel event",
+          highlight: 5
+        }),
+        link: "Where the drop happens"
+      },
+      {
+        page: "funnel",
+        kicker: "Devices and channels",
+        title: "Referral users buy a little more often",
+        num:
+          C.formatPct(channelTop.user_conversion.value) +
+          " user conversion, " +
+          esc(prettyChannel(channelTop.channel)),
+        chart: C.sparkBars(
+          desc.channels.map(function (c) {
+            return c.user_conversion.value;
+          }),
+          { title: "User conversion by first-touch channel" }
+        ),
+        link: "Compare the segments"
+      },
+      {
+        page: "cohorts",
+        kicker: "Retention",
+        title: "Few users come back the next week",
+        num: week1 ? C.formatPct(week1.value) + " return in week 1" : DASH,
+        chart: C.sparkLine(
+          firstCohort.retention.map(function (point) {
+            return point.rate.value;
+          }),
+          { title: "Weekly retention of the first cohort" }
+        ),
+        link: "See the retention grid"
+      },
+      {
+        page: "revenue",
+        kicker: "Revenue",
+        title: "The January fall was mostly conversion",
+        num: cmp23
+          ? C.formatMoney(Math.abs(cmp23.delta_revenue_usd)) + " lost from P2 to P3"
+          : DASH,
+        chart: C.sparkBars(
+          weeks.map(function (w) {
+            return w.revenue_usd;
+          }),
+          { title: "Revenue by week" }
+        ),
+        link: "Where the revenue went"
+      },
+      {
+        page: "experiments",
+        kicker: "Experiments",
+        title: "Checking a test every day would fool you often",
+        num: exp
+          ? C.formatPct(exp.peeking.fpr_naive_peeking.value) +
+            " false wins when peeking, " +
+            C.formatPct(exp.peeking.fpr_fixed_horizon.value) +
+            " when tested once"
+          : "Every effect is planted, on real traffic",
+        chart: exp
+          ? C.sparkBars(
+              [
+                exp.peeking.fpr_fixed_horizon.value,
+                exp.peeking.fpr_sequential.value,
+                exp.peeking.fpr_naive_peeking.value
+              ],
+              { title: "False-positive rate by testing rule", highlight: 2 }
+            )
+          : "",
+        link: "See the peeking trap"
+      }
+    ];
+
+    var bentoHtml =
+      '<section class="section bento-section"><h2 class="section-head">Five things the thousand shows</h2>' +
+      '<div class="bento">' +
+      bento
+        .map(function (item) {
+          return (
+            '<a class="bento-card" href="' +
+            item.page +
+            '.html" data-reveal>' +
+            '<p class="bento-kicker">' +
+            esc(item.kicker) +
+            "</p>" +
+            '<h3 class="bento-title">' +
+            esc(item.title) +
+            "</h3>" +
+            '<p class="bento-num">' +
+            item.num +
+            "</p>" +
+            '<div class="bento-chart">' +
+            item.chart +
+            "</div>" +
+            '<span class="bento-link">' +
+            esc(item.link) +
+            ' <span aria-hidden="true">\u2192</span></span>' +
+            "</a>"
+          );
+        })
+        .join("") +
+      "</div></section>";
 
     var readFirst =
       '<ul class="note-list">' +
-      '<li>One browser cookie is one "user". User counts are cookie counts, not people, ' +
-      "and cross-device behaviour cannot be joined because the user id is always empty.</li>" +
-      "<li>Channel is the first-touch source of the user, fixed when the user first arrives. " +
-      "It is not the source of each session and it is not last-click attribution.</li>" +
+      '<li>One browser cookie is one ' +
+      term("user", "user") +
+      ". User counts are cookie counts, not people, and cross-device behaviour cannot be joined because the user id is always empty.</li>" +
+      "<li>Channel is the first-touch source of the user, fixed when the user first arrives. It is not the source of each session and it is not last-click attribution.</li>" +
       "<li>The period runs from " +
       esc(desc.meta.date_min) +
       " to " +
       esc(desc.meta.date_max) +
       " and includes Black Friday and Christmas.</li>" +
-      "<li>The data contains no real experiment. The experiments page is a method check on " +
-      "real traffic, and every effect there is planted.</li>" +
+      "<li>The data contains no real experiment. The experiments page is a method check on real traffic, and every effect there is planted.</li>" +
       "</ul>";
-
-    var cards = [
-      kpi("Sessions", C.formatInt(k.sessions), "exact count"),
-      kpi("Users", C.formatInt(k.users), "one cookie each"),
-      kpi("Orders", C.formatInt(k.orders), "after collapsing"),
-      kpi("Revenue", C.formatMoney(k.revenue_usd), "sum of order revenue"),
-      kpi(
-        "Session conversion",
-        C.formatValue(k.session_conversion.value, "rate"),
-        C.numDetail(k.session_conversion, "rate")
-      ),
-      kpi(
-        "User conversion",
-        C.formatValue(k.user_conversion.value, "rate"),
-        C.numDetail(k.user_conversion, "rate")
-      ),
-      kpi("AOV", C.formatValue(k.aov.value, "money"), C.numDetail(k.aov, "money")),
-      kpi(
-        "Revenue per user",
-        C.formatValue(k.revenue_per_user.value, "money"),
-        C.numDetail(k.revenue_per_user, "money")
-      ),
-      kpi(
-        "Items per order",
-        C.formatValue(k.items_per_order.value, "number"),
-        C.numDetail(k.items_per_order, "number")
-      ),
-      kpi(
-        "Zero-revenue orders",
-        C.formatValue(k.zero_revenue_order_share.value, "rate"),
-        C.numDetail(k.zero_revenue_order_share, "rate")
-      )
-    ];
 
     var labels = weeks.map(function (w) {
       return w.week_start;
     });
-
     var sessionsChart = C.lineChart(
       [
         {
@@ -188,6 +517,7 @@
       ],
       {
         title: "Weekly sessions",
+        desc: "Sessions per week from " + desc.meta.date_min + " to " + desc.meta.date_max + ".",
         xLabels: labels,
         format: function (v) {
           return C.formatInt(v);
@@ -257,20 +587,40 @@
       })
     );
 
-    var out = "";
-    out += section("Key numbers", '<div class="kpi-grid">' + cards.join("") + "</div>");
-    out += card("Read this first", readFirst);
+    var out = hero;
     out += section(
-      "Weekly trend",
-      card("Sessions", sessionsChart + details("Show weekly values", sessionsTable)) +
-        card("Revenue", revenueChart + details("Show weekly values", revenueTable)) +
-        card("Session conversion", conversionChart + details("Show weekly values with intervals", conversionTable))
+      "numbers",
+      "The store in numbers",
+      '<div class="kpi-grid">' +
+        kpiExact("Sessions", C.formatInt(k.sessions)) +
+        kpiExact("Users (cookies)", C.formatInt(k.users)) +
+        kpiExact("Orders", C.formatInt(k.orders)) +
+        kpiExact("Revenue", C.formatMoney(k.revenue_usd)) +
+        kpiEstimate("Session conversion", k.session_conversion, "rate") +
+        kpiEstimate("User conversion", k.user_conversion, "rate") +
+        kpiEstimate("AOV", k.aov, "money") +
+        kpiEstimate("Revenue per user", k.revenue_per_user, "money") +
+        kpiEstimate("Items per order", k.items_per_order, "number") +
+        kpiEstimate("Zero-revenue orders", k.zero_revenue_order_share, "rate") +
+        "</div>"
     );
+    out += bentoHtml;
+    out += section("read", "Read this first", card("", readFirst));
+    out += section(
+      "weekly",
+      "The weeks",
+      '<div class="chart-grid">' +
+        chartCard("Sessions", sessionsChart, "Traffic climbs into the holidays, peaks in the first week of December, then falls back.", sessionsTable) +
+        chartCard("Revenue", revenueChart, "Revenue follows traffic, but falls faster than traffic after the holidays.", revenueTable) +
+        chartCard("Session conversion", conversionChart, "Each week's conversion with its 95% interval; the shaded band is the interval, not a trend.", conversionTable) +
+        "</div>"
+    );
+    out += nextCard("index");
     return out;
   }
 
   /* ------------------------------------------------------------------ */
-  /* 2. Funnel                                                           */
+  /* Funnel                                                              */
   /* ------------------------------------------------------------------ */
 
   function renderFunnel(desc) {
@@ -280,11 +630,29 @@
     var last = steps.length - 1;
     var out = "";
 
-    var funnelRows = steps.map(function (step, index) {
-      return { label: prettyStep(step), count: overall.reached[index] };
+    var firstDrop = 1 - overall.rate_from_prev[1].value;
+    var headline =
+      "The largest loss is before the cart: " +
+      '<span class="hl">' +
+      C.formatPct(firstDrop) +
+      "</span> of sessions that view an item never add one.";
+    out += pageHead(
+      "Conversion path",
+      headline,
+      "Two funnels are drawn together: the closed funnel needs every earlier step in the same session, the open funnel only needs the step's own event."
+    );
+
+    var pairedRows = steps.map(function (step, index) {
+      return {
+        label: prettyStep(step),
+        closed: overall.reached[index],
+        open: overall.open_reached[index]
+      };
     });
-    var funnelChart = C.funnelChart(funnelRows, {
-      title: "Closed funnel: sessions reaching each step"
+    var paired = C.pairedStepChart(pairedRows, {
+      title: "Closed and open funnel counts per step",
+      desc: "For each step, the closed count needs every earlier step in the same session; the open count only needs the step event.",
+      format: C.formatInt
     });
     var funnelTable = table(
       [
@@ -305,14 +673,13 @@
       })
     );
     out += section(
-      "Overall funnel",
-      card(
-        "",
-        funnelChart +
-          funnelTable +
-          '<p class="note">Closed counts need every earlier step in the same session; open ' +
-          "counts only need the step itself. They differ because a cart or checkout can start " +
-          "in an earlier session, so the later session has the event without the earlier ones.</p>"
+      "overall",
+      "Closed and open funnels",
+      chartCard(
+        "Sessions reaching each step",
+        paired,
+        "The closed funnel can only fall from step to step. The open funnel is higher because a cart or checkout can start in an earlier session, so the later session has the event without the earlier ones.",
+        funnelTable
       )
     );
 
@@ -336,7 +703,7 @@
         });
     }
 
-    function segmentCard(title, blockMap) {
+    function segmentCard(title, blockMap, meaning) {
       var data = purchaseRows(blockMap);
       var chart = C.barChart(
         data.map(function (row) {
@@ -365,31 +732,40 @@
           )
         ];
       });
-      return card(
+      return chartCard(
         title,
-        chart +
-          table(["Segment", "Purchases", "Sessions", "Purchase rate"], rows)
+        chart,
+        meaning,
+        table(["Segment", "Purchases", "Sessions", "Purchase rate"], rows)
       );
     }
 
     out += section(
+      "segments",
       "Purchase rate from sessions",
-      segmentCard("By device", f.by_device) +
-        segmentCard("By channel", f.by_channel) +
-        segmentCard("By country group", f.by_country)
+      '<div class="chart-grid">' +
+        segmentCard("By device", f.by_device, "Mobile and desktop land in almost the same place; the intervals overlap.") +
+        segmentCard("By channel", f.by_channel, "Referral and undisclosed-source users buy a little more often than the rest.") +
+        segmentCard("By country group", f.by_country, "Country groups are the five biggest by sessions plus everything else.") +
+        "</div>"
     );
 
     var skipped = f.skipped_step_share;
     out += section(
-      "Skipped steps",
+      "skipped",
+      "Sessions that skip a step",
       card(
         "",
-        '<p class="big-num">' +
-          C.formatNum(skipped, "rate") +
-          "</p>" +
-          '<p class="note">This is the share of sessions with a purchase event that skipped at ' +
-          "least one earlier closed-funnel step. A purchase can be logged without every earlier " +
-          "step being recorded first, so the closed funnel is a lower bound on each step.</p>"
+        '<div class="bigstat-row"><div class="bigstat"><div class="bigstat-label">Purchasing sessions that skip an earlier step</div><div class="bigstat-value">' +
+          C.formatValue(skipped.value, "rate") +
+          "</div>" +
+          intervalBar(skipped, "rate") +
+          '<div class="bigstat-ci">' +
+          esc(C.numDetail(skipped, "rate")) +
+          "</div></div></div>" +
+          note(
+            "This is the share of purchasing sessions with a purchase event that skipped at least one earlier closed-funnel step. A purchase can be logged without every earlier step being recorded first, so the closed funnel is a lower bound on each step."
+          )
       )
     );
 
@@ -397,96 +773,143 @@
       return test.page === "funnel";
     });
     var testTable = table(
-      ["Comparison", "Metric", "Difference", "Raw p", "Holm p"],
+      ["Comparison", "Metric", "Difference", "Raw p", "Holm p", "Verdict"],
       tests.map(function (test) {
         return [
           esc(test.a + " vs " + test.b),
           esc(prettyMetric(test.metric)),
           C.formatPct(test.diff),
           formatP(test.p_raw),
-          formatP(test.p_holm)
+          formatP(test.p_holm),
+          badge(test.p_holm < 0.05)
         ];
       })
     );
     out += section(
-      "Funnel segment tests",
-      card(
+      "tests",
+      "Segment tests",
+      chartCard(
+        "Do the segments differ?",
+        '<p class="prose">' +
+          "Two-proportion tests with " +
+          term("holm", "Holm's correction") +
+          " across the comparisons on this page. A small Holm p means the two segments differ.</p>" +
+          testTable,
         "",
-        testTable +
-          '<p class="note">Two-proportion tests with Holm correction across the comparisons on ' +
-          "this page. A small Holm p means the two segments differ.</p>"
+        ""
       )
     );
-
+    out += nextCard("funnel");
     return out;
   }
 
   /* ------------------------------------------------------------------ */
-  /* 3. Cohorts                                                          */
+  /* Cohorts                                                             */
   /* ------------------------------------------------------------------ */
 
   function renderCohorts(desc) {
     var cohorts = desc.cohorts;
     var maxOffset = 0;
+    var maxRet = 0;
     cohorts.forEach(function (cohort) {
       cohort.retention.forEach(function (point) {
         if (point.week_offset > maxOffset) {
           maxOffset = point.week_offset;
         }
+        if (point.week_offset >= 1 && point.rate.value > maxRet) {
+          maxRet = point.rate.value;
+        }
       });
     });
-
-    var cols = [];
-    for (var i = 0; i <= maxOffset; i += 1) {
-      cols.push(String(i));
+    if (!(maxRet > 0)) {
+      maxRet = 1;
     }
-    var matrix = cohorts.map(function (cohort) {
-      var row = new Array(maxOffset + 1);
-      cohort.retention.forEach(function (point) {
-        row[point.week_offset] = point.rate.value * 100;
-      });
-      return row;
-    });
-    var rowLabels = cohorts.map(function (cohort) {
-      return cohort.cohort_week;
-    });
 
-    var heat = C.heatmap(matrix, rowLabels, cols, {
-      title: "Retention by cohort week and week offset",
-      format: function (value) {
-        return (Math.round(value * 10) / 10).toFixed(1) + "%";
+    var firstWeek1 = null;
+    cohorts[0].retention.forEach(function (point) {
+      if (point.week_offset === 1) {
+        firstWeek1 = point.rate;
+      }
+    });
+    var lastWeek1 = null;
+    cohorts[cohorts.length - 1].retention.forEach(function (point) {
+      if (point.week_offset === 1) {
+        lastWeek1 = point.rate;
       }
     });
 
-    var cohortRows = cohorts.map(function (cohort) {
-      var first = cohort.retention.filter(function (point) {
-        return point.week_offset === 1;
-      })[0];
-      return [
-        esc(cohort.cohort_week),
-        C.formatInt(cohort.cohort_users),
-        first ? C.formatNum(first.rate, "rate") : DASH
-      ];
-    });
-    var cohortTable = table(
-      ["Cohort week", "Cohort users", "Week-1 retention"],
-      cohortRows
+    var headline =
+      "Few users come back: " +
+      '<span class="hl">' +
+      (firstWeek1 ? C.formatPct(firstWeek1.value) : DASH) +
+      "</span> of the first cohort are active the next week" +
+      (lastWeek1 ? ", falling to " + C.formatPct(lastWeek1.value) + " by " + esc(cohorts[cohorts.length - 1].cohort_week) : "") +
+      ".";
+    var out = pageHead(
+      "Retention",
+      headline,
+      "Each row is a cohort week; each column is a week after the first visit. Read the grid left to right to watch a cohort fade."
     );
 
-    var out = section(
-      "Retention heatmap",
+    var head = '<tr><th scope="col" class="heat-rowhead">Cohort week</th><th scope="col" class="num">Users</th>';
+    for (var i = 0; i <= maxOffset; i += 1) {
+      head += '<th scope="col" class="num">W' + i + "</th>";
+    }
+    head += "</tr>";
+    var body = cohorts
+      .map(function (cohort) {
+        var cells = '<th scope="row" class="heat-rowhead">' + esc(cohort.cohort_week) + "</th>";
+        cells += '<td class="num">' + C.formatInt(cohort.cohort_users) + "</td>";
+        for (var j = 0; j <= maxOffset; j += 1) {
+          var point = null;
+          cohort.retention.forEach(function (p) {
+            if (p.week_offset === j) {
+              point = p;
+            }
+          });
+          if (!point) {
+            cells += '<td class="heat-cell heat-empty">' + DASH + "</td>";
+          } else if (j === 0) {
+            cells += '<td class="heat-cell heat-base">100%</td>';
+          } else {
+            var ratio = point.rate.value / maxRet;
+            var step = Math.min(5, Math.max(0, Math.round(ratio * 5)));
+            cells +=
+              '<td class="heat-cell heat-' +
+              step +
+              '">' +
+              C.formatPct(point.rate.value, 1) +
+              "</td>";
+          }
+        }
+        return "<tr>" + cells + "</tr>";
+      })
+      .join("");
+
+    var heat =
+      '<div class="heat-scroll" tabindex="0" role="region" aria-label="Retention heatmap, scrolls horizontally"><table class="heat-table"><thead>' +
+      head +
+      "</thead><tbody>" +
+      body +
+      "</tbody></table></div>";
+
+    out += section(
+      "retention",
+      "Retention by cohort",
       card(
-        "",
+        "Share of each cohort active again in each week",
         heat +
-          cohortTable +
-          '<p class="note">Each row is a cohort week (the Monday of a first event). Each column ' +
-          "is weeks after that first week. The value is the share of the cohort with at least one " +
-          "session in that week; only fully observed cells are shown.</p>"
+          note(
+            "Each row is a cohort week, the Monday of a user's first event. Each column is weeks after that first week. The value is the share of the cohort with at least one " +
+              term("session", "session") +
+              " in that week; only fully observed cells are shown. The grid scrolls sideways on a phone."
+          )
       )
     );
 
     var rep = desc.repeat;
     out += section(
+      "repeat",
       "Repeat purchase",
       card(
         "",
@@ -500,21 +923,75 @@
             ]
           ]
         ) +
-          '<p class="note">The repeat rate is measured among buyers whose first order is at ' +
-          "least 28 days before the last date in the data. The median days figure is conditional " +
-          "on reordering.</p>"
+          note(
+            "The repeat rate is measured among buyers whose first order is at least 28 days before the last date in the data. The median days figure is conditional on reordering. At least half of those second orders come the same day, which reads as split baskets, not returning customers."
+          )
       )
     );
+    out += nextCard("cohorts");
     return out;
   }
 
   /* ------------------------------------------------------------------ */
-  /* 4. Revenue                                                          */
+  /* Revenue                                                             */
   /* ------------------------------------------------------------------ */
 
+  function bridgeSteps(cmp) {
+    var sums = { sessions: 0, conversion: 0, aov: 0 };
+    (cmp.by_device || []).forEach(function (row) {
+      sums.sessions += row.sessions_effect;
+      sums.conversion += row.conversion_effect;
+      sums.aov += row.aov_effect;
+    });
+    return [
+      { label: "Sessions", delta: sums.sessions },
+      { label: "Conversion", delta: sums.conversion },
+      { label: "Order value", delta: sums.aov }
+    ];
+  }
+
+  function bridgeCard(cmp, periods) {
+    var from = periods[cmp.from];
+    var to = periods[cmp.to];
+    var spec = {
+      start: { label: cmp.from + " revenue", value: from.revenue_usd },
+      end: { label: cmp.to + " revenue", value: to.revenue_usd },
+      steps: bridgeSteps(cmp)
+    };
+    var chart = C.bridgeChart(spec, {
+      title: cmp.from + " to " + cmp.to + " revenue bridge",
+      desc:
+        "Revenue moves from " +
+        C.formatMoney(from.revenue_usd) +
+        " to " +
+        C.formatMoney(to.revenue_usd) +
+        " through sessions, conversion and order value, summed over device segments.",
+      format: function (v) {
+        return C.formatMoney(v);
+      }
+    });
+    return chart;
+  }
+
   function renderRevenue(decomp, desc) {
-    var out = "";
     var periods = decomp.periods;
+    var cmp23 = null;
+    var cmp12 = null;
+    (decomp.comparisons || []).forEach(function (cmp) {
+      if (cmp.from === "P2" && cmp.to === "P3") {
+        cmp23 = cmp;
+      }
+      if (cmp.from === "P1" && cmp.to === "P2") {
+        cmp12 = cmp;
+      }
+    });
+
+    var headline = "Revenue fell " + '<span class="hl">' + (cmp23 ? C.formatMoney(Math.abs(cmp23.delta_revenue_usd)) : DASH) + "</span> from P2 to P3, and conversion explains most of it.";
+    var out = pageHead(
+      "Decomposition",
+      headline,
+      "A bridge from one period's revenue to the next shows whether traffic, conversion or order value moved. Falls are drawn in the lost colour."
+    );
 
     var periodCards = ["P1", "P2", "P3"].map(function (name) {
       var period = periods[name];
@@ -530,24 +1007,64 @@
         ])
       );
     });
-    out += section("Periods", '<div class="card-grid">' + periodCards.join("") + "</div>");
+    out += section("periods", "Three 28-day periods", '<div class="card-grid">' + periodCards.join("") + "</div>");
 
-    decomp.comparisons.forEach(function (cmp) {
+    var zero = desc && desc.data_quality && desc.data_quality.zero_revenue_by_period;
+    var zeroSentence = "";
+    if (zero && zero.P2 && zero.P3) {
+      zeroSentence =
+        "Zero-revenue orders were " +
+        C.formatNum(zero.P2.share, "rate") +
+        " of P2 orders and " +
+        C.formatNum(zero.P3.share, "rate") +
+        " of P3 orders, so part of the order-value fall is a data artefact.";
+    }
+
+    var bridgeSection = "";
+    if (cmp23) {
+      bridgeSection += chartCard(
+        "P2 to P3: where the revenue went",
+        bridgeCard(cmp23, periods),
+        zeroSentence || "Each bar moves the running revenue by one term; the red bars are falls.",
+        table(
+          ["Term", "Dollars"],
+          bridgeSteps(cmp23).map(function (s) {
+            return [esc(s.label), C.formatMoney(s.delta)];
+          })
+        )
+      );
+    }
+    if (cmp12) {
+      bridgeSection += chartCard(
+        "P1 to P2: where the revenue went",
+        bridgeCard(cmp12, periods),
+        "The holiday rise came from traffic and conversion in almost equal parts; order value barely moved.",
+        table(
+          ["Term", "Dollars"],
+          bridgeSteps(cmp12).map(function (s) {
+            return [esc(s.label), C.formatMoney(s.delta)];
+          })
+        )
+      );
+    }
+    out += section("bridge", "Where the revenue went", bridgeSection);
+
+    var logSection = "";
+    (decomp.comparisons || []).forEach(function (cmp) {
       var lc = cmp.log_change;
       var terms = [
         { label: "Sessions", num: lc.sessions },
         { label: "Conversion", num: lc.conversion },
-        { label: "AOV", num: lc.aov }
+        { label: "Order value", num: lc.aov }
       ];
       var total = lc.total.value;
-
       var chart = C.divergingBarChart(
-        terms.map(function (term) {
+        terms.map(function (t) {
           return {
-            label: term.label,
-            value: term.num.value,
-            ci_low: term.num.ci_low,
-            ci_high: term.num.ci_high
+            label: t.label,
+            value: t.num.value,
+            ci_low: t.num.ci_low,
+            ci_high: t.num.ci_high
           };
         }),
         {
@@ -557,70 +1074,88 @@
           }
         }
       );
-
-      var shareRows = terms.map(function (term) {
+      var shareRows = terms.map(function (t) {
         return [
-          esc(term.label),
-          C.formatNum(term.num, "log"),
-          C.formatPct(total ? term.num.value / total : 0)
+          esc(t.label),
+          C.formatNum(t.num, "log"),
+          C.formatPct(total ? t.num.value / total : 0)
         ];
       });
       shareRows.push(["Total", C.formatNum(lc.total, "log"), C.formatPct(1)]);
-      var shareTable = table(["Term", "Log change", "Share of total"], shareRows);
+      logSection += chartCard(
+        cmp.from + " to " + cmp.to,
+        chart,
+        "The log change splits the revenue move into three terms that add up exactly; the whiskers are 95% bootstrap intervals.",
+        table(["Term", "Log change", "Share of total"], shareRows)
+      );
+    });
+    out += section("logchange", "What moved, in log terms", logSection);
 
+    var segSection = "";
+    (decomp.comparisons || []).forEach(function (cmp) {
       function dollars(title, rowsData) {
-        return card(
+        return chartCard(
           title,
           table(
-            ["Segment", "Revenue change", "Sessions", "Conversion", "AOV"],
+            ["Segment", "Revenue change", "Sessions", "Conversion", "Order value"],
             rowsData.map(function (row) {
               return [
-                esc(row.segment),
+                esc(prettyChannel(row.segment)),
                 C.formatMoney(row.delta_revenue_usd),
                 C.formatMoney(row.sessions_effect),
                 C.formatMoney(row.conversion_effect),
                 C.formatMoney(row.aov_effect)
               ];
             })
-          )
+          ),
+          "",
+          ""
         );
       }
-
-      var zeroNote = "";
-      var zero = desc && desc.data_quality && desc.data_quality.zero_revenue_by_period;
-      if (cmp.from === "P2" && cmp.to === "P3" && zero && zero.P2 && zero.P3) {
-        zeroNote =
-          '<p class="note">Zero-revenue orders were ' +
-          C.formatNum(zero.P2.share, "rate") +
-          " of P2 orders and " +
-          C.formatNum(zero.P3.share, "rate") +
-          " of P3 orders, so part of the AOV fall is a data artefact.</p>";
-      }
-
-      out += section(
-        "Change " + cmp.from + " to " + cmp.to,
-        card("", chart + shareTable + zeroNote) +
-          '<div class="card-grid">' +
-          dollars("By channel", cmp.by_channel) +
-          dollars("By device", cmp.by_device) +
-          "</div>"
-      );
+      segSection +=
+        '<h3 class="group-head">' +
+        esc(cmp.from + " to " + cmp.to) +
+        "</h3>" +
+        '<div class="chart-grid">' +
+        dollars("By channel", cmp.by_channel) +
+        dollars("By device", cmp.by_device) +
+        "</div>";
     });
-
-    out +=
-      '<p class="note">The periods differ by season. This decomposition says which term ' +
-      "moved; it does not say why, and nothing here is a causal claim.</p>";
+    out += section(
+      "segments",
+      "By channel and device",
+      segSection +
+        note(
+          "The periods differ by season. This decomposition says which term moved; it does not say why, and nothing here is a causal claim."
+        )
+    );
+    out += nextCard("revenue");
     return out;
   }
 
   /* ------------------------------------------------------------------ */
-  /* 5. Experiments                                                      */
+  /* Experiments                                                         */
   /* ------------------------------------------------------------------ */
 
   function renderExperiments(exp) {
     var out = "";
+    var peek = exp.peeking;
+
+    var headline =
+      "Checking a test every day would call " +
+      '<span class="hl">' +
+      C.formatPct(peek.fpr_naive_peeking.value) +
+      "</span> of no-effect tests a win, against " +
+      C.formatPct(peek.fpr_fixed_horizon.value) +
+      " when it is tested once.";
+    out += pageHead(
+      "Method check",
+      headline,
+      "No experiment exists in this data; every effect is planted. These figures check whether the testing engine behaves the way theory says it should."
+    );
+
     out +=
-      '<div class="notice notice-strong"><p><strong>Method check.</strong> ' +
+      '<div class="notice notice-strong" data-reveal><p class="notice-title">Method check</p><p>' +
       esc(exp.meta.note) +
       '</p><p class="note">Population: ' +
       C.formatInt(exp.meta.n_users) +
@@ -632,23 +1167,61 @@
       C.formatValue(exp.meta.alpha, "number") +
       ".</p></div>";
 
-    var base = exp.baseline;
     out += section(
-      "Baseline",
-      card(
-        "",
-        table(
-          ["Metric", "Estimate"],
-          [
-            ["Conversion rate", C.formatNum(base.conversion_rate, "rate")],
-            ["Revenue per user", C.formatNum(base.revenue_per_user, "money")]
-          ]
+      "peeking",
+      "The peeking trap",
+      '<div class="bigstat-row">' +
+        bigStat("Tested once at the end", peek.fpr_fixed_horizon, "rate", "The correct way to test.") +
+        bigStat("Checked every day, stop at the first win", peek.fpr_naive_peeking, "rate", "The false-win rate balloons.") +
+        bigStat("Checked daily with a boundary", peek.fpr_sequential, "rate", "A sequential boundary holds the rate near 5%.") +
+        "</div>" +
+        note(
+          "Each figure is the false-positive rate over " +
+            C.formatInt(exp.meta.n_sims) +
+            " A/A simulations. The band that counts as a pass is " +
+            C.formatPct(peek.band_low) +
+            " to " +
+            C.formatPct(peek.band_high) +
+            "."
         )
+    );
+
+    var passRows = [
+      ["A/A false positives, conversion", C.formatNum(exp.aa.fpr_conversion, "rate"), "3.7% to 6.4%", badge(exp.aa.pass_conversion)],
+      ["A/A false positives, revenue per user", C.formatNum(exp.aa.fpr_revenue, "rate"), "3.7% to 6.4%", badge(exp.aa.pass_revenue)],
+      ["Daily peeking with the boundary", C.formatNum(peek.fpr_sequential, "rate"), "at most 6.4%", badge(peek.pass_sequential)]
+    ];
+    exp.planted.forEach(function (row) {
+      passRows.push([
+        "Interval coverage, planted " + C.formatPct(row.rel_lift, 0) + " lift",
+        C.formatNum(row.coverage, "rate"),
+        "93% to 97%",
+        badge(row.pass)
+      ]);
+    });
+    out += section(
+      "passrules",
+      "Pass rules",
+      chartCard(
+        "Every check and its verdict",
+        table(["Check", "Result", "Rule", "Verdict"], passRows),
+        "A FAIL would appear here with the same weight as a PASS. All the rules were fixed before the numbers were computed.",
+        ""
       )
     );
 
+    var base = exp.baseline;
+    out += section(
+      "baseline",
+      "Baseline",
+      '<div class="kpi-grid">' +
+        kpiEstimate("Conversion rate", base.conversion_rate, "rate") +
+        kpiEstimate("Revenue per user", base.revenue_per_user, "money") +
+        "</div>"
+    );
+
     var powerTable = table(
-      ["Relative lift", "Users per arm needed", "Power at actual n"],
+      ["Relative lift", "Users per arm needed", "Power at the actual n"],
       exp.power.map(function (row) {
         return [
           C.formatPct(row.rel_lift, 0),
@@ -658,46 +1231,37 @@
       })
     );
     out += section(
+      "power",
       "Power",
-      card(
-        "",
-        powerTable +
-          '<p class="note">Minimum detectable relative lift at the actual sample size: ' +
+      chartCard(
+        "What this store can detect",
+        powerTable,
+        "The minimum detectable relative lift at the actual sample size is " +
           C.formatPct(exp.mde_at_actual_n) +
-          ".</p>"
+          ". Small lifts need far more traffic than one month provides.",
+        ""
       )
     );
 
     var aa = exp.aa;
     var aaBand = C.formatPct(aa.band_low) + " to " + C.formatPct(aa.band_high);
     out += section(
-      "A/A false-positive rate",
-      card(
-        "",
+      "aa",
+      "A/A calibration",
+      chartCard(
+        "False positives when there is no effect",
         table(
           ["Metric", "False-positive rate", "Pass band", "Result"],
           [
-            [
-              "Conversion",
-              C.formatNum(aa.fpr_conversion, "rate"),
-              aaBand,
-              badge(aa.pass_conversion)
-            ],
-            [
-              "Revenue",
-              C.formatNum(aa.fpr_revenue, "rate"),
-              aaBand,
-              badge(aa.pass_revenue)
-            ]
+            ["Conversion", C.formatNum(aa.fpr_conversion, "rate"), aaBand, badge(aa.pass_conversion)],
+            ["Revenue", C.formatNum(aa.fpr_revenue, "rate"), aaBand, badge(aa.pass_revenue)]
           ]
-        ) +
-          '<p class="note">' +
-          C.formatInt(exp.meta.n_sims) +
-          " A/A splits. The false-positive rate must land in the central 95% binomial band (" +
-          aaBand +
-          "). Conversion p-value distribution KS test p = " +
+        ),
+        C.formatInt(exp.meta.n_sims) +
+          " A/A splits. The conversion p-value distribution KS test p = " +
           formatP(aa.ks_p_conversion) +
-          ".</p>"
+          ".",
+        ""
       )
     );
 
@@ -715,164 +1279,139 @@
       })
     );
     out += section(
+      "planted",
       "Planted lifts",
-      card(
-        "",
-        plantedTable +
-          '<p class="note">Every effect was planted. A lift passes when its 95% interval ' +
-          "covers the true difference in 93% to 97% of runs.</p>"
+      chartCard(
+        "Does the interval cover the truth?",
+        plantedTable,
+        "Every effect was planted. A lift passes when its 95% interval covers the true difference in 93% to 97% of runs.",
+        ""
       )
     );
 
     var cuped = exp.cuped;
     out += section(
-      "CUPED",
-      card(
-        "",
+      "cuped",
+      term("cuped", "CUPED"),
+      chartCard(
+        "Variance reduction from a pre-period covariate",
         table(
           ["Metric", "Estimate", "Theta"],
           [
-            [
-              "Share with any history",
-              C.formatNum(cuped.share_with_pre_period, "rate"),
-              DASH
-            ],
-            [
-              "Conversion variance reduction",
-              C.formatNum(cuped.conversion.variance_reduction, "rate"),
-              C.formatValue(cuped.conversion.theta, "number")
-            ],
-            [
-              "Revenue variance reduction",
-              C.formatNum(cuped.revenue.variance_reduction, "rate"),
-              C.formatValue(cuped.revenue.theta, "number")
-            ]
+            ["Share with any history", C.formatNum(cuped.share_with_pre_period, "rate"), DASH],
+            ["Conversion variance reduction", C.formatNum(cuped.conversion.variance_reduction, "rate"), C.formatValue(cuped.conversion.theta, "number")],
+            ["Revenue variance reduction", C.formatNum(cuped.revenue.variance_reduction, "rate"), C.formatValue(cuped.revenue.theta, "number")]
           ]
-        ) +
-          '<p class="note">The covariate is sessions before the window for conversion, and ' +
-          "revenue before the window for revenue. The reduction is expected to be small because " +
-          "few users have any history.</p>"
+        ),
+        "Only " +
+          C.formatPct(cuped.share_with_pre_period.value) +
+          " of users have any earlier visit, so the reduction is small and CUPED is not worth running here.",
+        ""
       )
     );
 
-    var peek = exp.peeking;
+    var cross = exp.cross_checks;
     out += section(
-      "Peeking",
+      "crosschecks",
+      "Cross-checks on one fixed split",
       card(
         "",
         table(
-          ["Look strategy", "False-positive rate", "Result"],
+          ["Check", "Value"],
           [
-            ["Fixed horizon", C.formatNum(peek.fpr_fixed_horizon, "rate"), DASH],
-            ["Naive peeking", C.formatNum(peek.fpr_naive_peeking, "rate"), DASH],
-            [
-              "Sequential",
-              C.formatNum(peek.fpr_sequential, "rate"),
-              badge(peek.pass_sequential)
-            ]
+            ["Conversion z-test p", formatP(cross.conversion.z_test_p)],
+            ["Conversion permutation p", formatP(cross.conversion.permutation_p) + " (" + C.formatInt(cross.conversion.n_perm) + " permutations)"],
+            ["Revenue difference", C.formatValue(cross.revenue.diff, "number")],
+            ["Revenue Welch interval", esc(C.formatValue(cross.revenue.welch_ci[0], "number") + " to " + C.formatValue(cross.revenue.welch_ci[1], "number"))],
+            ["Revenue bootstrap interval", esc(C.formatValue(cross.revenue.bootstrap_ci[0], "number") + " to " + C.formatValue(cross.revenue.bootstrap_ci[1], "number"))]
           ]
-        ) +
-          '<p class="note">' +
-          C.formatInt(peek.n_looks) +
-          " daily looks. The sequential boundary is O'Brien-Fleming shaped with constant " +
-          C.formatValue(peek.obf_constant, "number") +
-          "; it must not exceed the band top of " +
-          C.formatPct(peek.band_high) +
-          ".</p>"
+        )
       )
     );
-
+    out += nextCard("experiments");
     return out;
   }
 
   /* ------------------------------------------------------------------ */
-  /* 6. Data quality                                                     */
+  /* Data quality                                                        */
   /* ------------------------------------------------------------------ */
+
+  function pairBar(label, raw, modelled, format) {
+    var scaleMax = Math.max(raw, modelled) || 1;
+    var rawW = (raw / scaleMax) * 100;
+    var modW = (modelled / scaleMax) * 100;
+    var gap = raw - modelled;
+    return (
+      '<div class="pairbar">' +
+      '<p class="pairbar-title">' +
+      esc(label) +
+      "</p>" +
+      '<div class="pairbar-row"><span class="pairbar-tag">Raw</span><span class="pairbar-track"><span class="pairbar-fill pairbar-raw" style="width:' +
+      rawW.toFixed(2) +
+      '%"></span></span><span class="pairbar-value">' +
+      format(raw) +
+      "</span></div>" +
+      '<div class="pairbar-row"><span class="pairbar-tag">Modelled</span><span class="pairbar-track"><span class="pairbar-fill pairbar-mod" style="width:' +
+      modW.toFixed(2) +
+      '%"></span></span><span class="pairbar-value">' +
+      format(modelled) +
+      "</span></div>" +
+      '<p class="pairbar-gap">Gap: ' +
+      format(gap) +
+      "</p></div>"
+    );
+  }
 
   function renderQuality(desc) {
     var q = desc.data_quality;
     var gap = q.raw_purchase_revenue_usd - q.order_revenue_usd;
-    var gapShare = q.raw_purchase_revenue_usd
-      ? gap / q.raw_purchase_revenue_usd
-      : 0;
+    var gapShare = q.raw_purchase_revenue_usd ? gap / q.raw_purchase_revenue_usd : 0;
+
+    var headline =
+      "Summing the raw purchase events would overstate revenue by " +
+      '<span class="hl">' +
+      C.formatMoney(gap) +
+      "</span> (" +
+      C.formatPct(gapShare) +
+      ").";
+    var out = pageHead(
+      "Trust",
+      headline,
+      "The models reshape the raw events rather than recompute them. Where the two differ, both sides and the gap are shown."
+    );
+
+    out += section(
+      "reconcile",
+      "Raw against modelled",
+      card(
+        "Paired bars for the three checks",
+        pairBar("Purchase events against orders", q.raw_purchase_events, q.orders, C.formatInt) +
+          pairBar("Raw purchase revenue against order revenue", q.raw_purchase_revenue_usd, q.order_revenue_usd, C.formatMoney) +
+          note(
+            "Orders are lower because repeated purchase events are collapsed into one order per transaction id, and one per session when the id is (not set). Order revenue is lower because collapsing keeps the largest revenue per order and drops the duplicate events behind it."
+          )
+      )
+    );
 
     var rows = [
-      [
-        "Raw events vs modelled events",
-        C.formatInt(q.raw_events),
-        C.formatInt(q.mart_events),
-        C.formatInt(q.mart_events - q.raw_events)
-      ],
-      [
-        "Purchase events vs orders",
-        C.formatInt(q.raw_purchase_events),
-        C.formatInt(q.orders),
-        C.formatInt(q.orders - q.raw_purchase_events)
-      ],
-      [
-        "Raw purchase revenue vs order revenue",
-        C.formatMoney(q.raw_purchase_revenue_usd),
-        C.formatMoney(q.order_revenue_usd),
-        C.formatMoney(gap) + " (" + C.formatPct(gapShare) + ")"
-      ],
-      [
-        "(not set) transaction events",
-        C.formatInt(q.not_set_transaction_events),
-        DASH,
-        DASH
-      ],
-      [
-        "Session source-parameter coverage",
-        C.formatPct(q.session_source_param_coverage),
-        DASH,
-        DASH
-      ]
+      ["Raw events vs modelled events", C.formatInt(q.raw_events), C.formatInt(q.mart_events), C.formatInt(q.mart_events - q.raw_events)],
+      ["Purchase events vs orders", C.formatInt(q.raw_purchase_events), C.formatInt(q.orders), C.formatInt(q.orders - q.raw_purchase_events)],
+      ["Raw purchase revenue vs order revenue", C.formatMoney(q.raw_purchase_revenue_usd), C.formatMoney(q.order_revenue_usd), C.formatMoney(gap) + " (" + C.formatPct(gapShare) + ")"],
+      ["(not set) transaction events", C.formatInt(q.not_set_transaction_events), DASH, DASH],
+      ["Session source-parameter coverage", C.formatPct(q.session_source_param_coverage), DASH, DASH]
     ];
-
-    var notes = [
-      [
-        "Raw events vs modelled events",
-        "The models only reshape the raw events, so the modelled event count matches the raw " +
-          "count exactly."
-      ],
-      [
-        "Purchase events vs orders",
-        "Orders are lower because repeated purchase events are collapsed into one order per " +
-          "transaction id, and one per session when the id is (not set)."
-      ],
-      [
-        "Revenue",
-        "Order revenue is lower because collapsing keeps the largest revenue per order and " +
-          "drops the duplicate purchase events behind it."
-      ],
-      [
-        "(not set) transaction events",
-        "These purchase events carry no transaction id, so they cannot be matched by id and " +
-          "are grouped per user and session instead."
-      ],
-      [
-        "Session source-parameter coverage",
-        "Only " +
-          C.formatPct(q.session_source_param_coverage) +
-          " of sessions carry session-level source parameters. The rest have none, which is why " +
-          "channel uses the user first-touch source."
-      ]
-    ];
-
-    var noteList =
-      '<ul class="note-list">' +
-      notes
-        .map(function (item) {
-          return (
-            "<li><strong>" +
-            esc(item[0]) +
-            ".</strong> " +
-            item[1] +
-            "</li>"
-          );
-        })
-        .join("") +
-      "</ul>";
+    out += section(
+      "table",
+      "Reconciliation",
+      chartCard(
+        "Every check, raw and modelled",
+        table(["Check", "Raw", "Modelled", "Difference"], rows),
+        "The modelled event count matches the raw count exactly. " +
+          C.formatInt(q.not_set_transaction_events) +
+          " purchase events carry no transaction id, so they can only be collapsed per session.",
+        ""
+      )
+    );
 
     var zero = q.zero_revenue_by_period || {};
     var zeroRows = ["P1", "P2", "P3"]
@@ -889,30 +1428,20 @@
           C.formatMoney(z.aov_paid_orders)
         ];
       });
-    var zeroSection = zeroRows.length
-      ? section(
-          "Zero-revenue orders by period",
-          card(
-            "",
-            table(
-              ["Period", "Orders", "Zero-revenue orders", "Share", "AOV, paid orders"],
-              zeroRows
-            ) +
-              '<p class="note">Orders are placed in a period by the session date of their ' +
-              "session. AOV here is revenue divided by orders with revenue above zero.</p>"
-          )
+    if (zeroRows.length) {
+      out += section(
+        "zero",
+        "Zero-revenue orders by period",
+        chartCard(
+          "Orders with no revenue",
+          table(["Period", "Orders", "Zero-revenue orders", "Share", "AOV, paid orders"], zeroRows),
+          "Orders are placed in a period by the session date of their session. AOV here is revenue divided by orders with revenue above zero. The P3 share is the tracking problem behind the order-value fall.",
+          ""
         )
-      : "";
-
-    return (
-      section(
-        "Reconciliation",
-        card(
-          "",
-          table(["Check", "Raw", "Modelled", "Difference"], rows) + noteList
-        )
-      ) + zeroSection
-    );
+      );
+    }
+    out += nextCard("quality");
+    return out;
   }
 
   /* ------------------------------------------------------------------ */
@@ -930,7 +1459,7 @@
 
   function renderFor(page, results) {
     if (page === "index") {
-      return renderOverview(results[0], results[1]);
+      return renderOverview(results[0], results[1], results[2]);
     }
     if (page === "funnel") {
       return renderFunnel(results[0]);
@@ -958,7 +1487,11 @@
       return ["data/experiments.json"];
     }
     if (page === "index") {
-      return ["data/descriptive.json", "data/decomposition.json"];
+      return [
+        "data/descriptive.json",
+        "data/decomposition.json",
+        "data/experiments.json"
+      ];
     }
     return ["data/descriptive.json"];
   }
@@ -971,11 +1504,33 @@
     var page = target.getAttribute("data-page") || "";
     Promise.all(sourcesFor(page).map(getJSON))
       .then(function (results) {
-        target.innerHTML = renderFor(page, results);
+        if (page !== "lab") {
+          target.innerHTML = renderFor(page, results);
+        }
+        var desc = null;
+        for (var i = 0; i < results.length; i += 1) {
+          if (results[i] && results[i].meta && results[i].meta.date_min) {
+            desc = results[i];
+            break;
+          }
+        }
+        var footer = document.getElementById("footer-slot");
+        if (footer && desc) {
+          footer.innerHTML = renderFooter(desc);
+        }
+        if (typeof window !== "undefined" && window.Site) {
+          window.Site.observe(document);
+          window.Site.glossary(document);
+        }
+        if (page === "index" && typeof window !== "undefined" && window.Hero) {
+          window.Hero.mount(document.querySelector("[data-hero]"));
+        }
       })
       .catch(function () {
-        target.innerHTML =
-          '<p class="placeholder">Data is not available yet.</p>';
+        if (page !== "lab") {
+          target.innerHTML =
+            '<p class="placeholder">Data is not available yet.</p>';
+        }
       });
   }
 
@@ -986,6 +1541,9 @@
     renderRevenue: renderRevenue,
     renderExperiments: renderExperiments,
     renderQuality: renderQuality,
+    renderFooter: renderFooter,
+    renderFor: renderFor,
+    sourcesFor: sourcesFor,
     mount: mount
   };
 
