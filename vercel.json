@@ -1,4 +1,1 @@
-{
-  "cleanUrls": true,
-  "outputDirectory": "site"
-}
+{"cleanUrls": true, "outputDirectory": "site", "framework": null, "buildCommand": null, "installCommand": null}

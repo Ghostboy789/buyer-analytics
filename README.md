@@ -8,6 +8,8 @@ fell 12%, but orders per session fell from 1.94% to 1.02%: conversion explains 5
 (log change −0.640, 95% interval −0.718 to −0.559). Most of the apparent fall in order value
 is a tracking fault: 24.2% of January orders record zero revenue, against 3.4% before.
 
+**Live site:** https://buyer-analytics.vercel.app
+
 Findings with intervals: [`docs/FINDINGS.md`](docs/FINDINGS.md). One-page recommendation:
 [`docs/MEMO.md`](docs/MEMO.md).
 
