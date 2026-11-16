@@ -55,6 +55,10 @@ def bootstrap_ratio(
     if numer.size == 0 or numer.size != denom.size or n_boot <= 0:
         return None, None
 
+    # Sort the rows so the interval does not depend on the order they arrive in.
+    order = np.lexsort((denom, numer))
+    numer, denom = numer[order], denom[order]
+
     size = numer.size
     rng = np.random.default_rng(seed)
     ratios = np.empty(n_boot, dtype=float)

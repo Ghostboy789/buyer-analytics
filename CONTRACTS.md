@@ -175,6 +175,7 @@ Every file has `meta.synthetic` (false for anything published).
  "funnel": {"steps": ["view_item", "add_to_cart", "begin_checkout", "add_shipping_info",
                       "add_payment_info", "purchase"],
             "overall": {"sessions": int, "reached": [int x6],
+                        "open_reached": [int x6],
                         "rate_from_sessions": [NUM x6], "rate_from_prev": [NUM x6]},
             "by_device": {"<device>": same shape as overall},
             "by_channel": {"<channel>": same shape},
@@ -189,8 +190,15 @@ Every file has `meta.synthetic` (false for anything published).
                     "p_raw": number, "p_holm": number}],
  "data_quality": {"raw_events": int, "mart_events": int, "raw_purchase_events": int,
                   "orders": int, "raw_purchase_revenue_usd": number, "order_revenue_usd": number,
-                  "not_set_transaction_events": int, "session_source_param_coverage": number}}
+                  "not_set_transaction_events": int, "session_source_param_coverage": number,
+                  "zero_revenue_by_period": {"P1": {"orders": int, "zero_revenue_orders": int,
+                                                    "share": NUM, "aov_paid_orders": number},
+                                             "P2": same, "P3": same}}}
 ```
+`open_reached` counts sessions whose step flag is set, earlier steps ignored. The zero-revenue
+table assigns an order to a period by the `session_date` of its session; `aov_paid_orders` is
+revenue over orders with revenue above zero.
+
 Intervals: Wilson for rates; bootstrap over users (500 draws) for AOV, revenue per user, items
 per order and the median.
 
@@ -216,6 +224,10 @@ Here `conversion` is orders / sessions.
  "baseline": {"conversion_rate": NUM, "revenue_per_user": NUM},
  "power": [{"rel_lift": number, "n_per_arm_needed": int, "power_at_actual_n": number}],
  "mde_at_actual_n": number,
+ "cross_checks": {"split_salt": str,
+                  "conversion": {"z_test_p": number, "permutation_p": number, "n_perm": int},
+                  "revenue": {"diff": number, "welch_ci": [number, number],
+                              "bootstrap_ci": [number, number], "n_boot": int}},
  "aa": {"fpr_conversion": NUM, "fpr_revenue": NUM, "band_low": number, "band_high": number,
         "ks_p_conversion": number, "pass_conversion": bool, "pass_revenue": bool},
  "planted": [{"rel_lift": number, "true_diff": number, "bias": number, "power": NUM,

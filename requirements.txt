@@ -11,3 +11,4 @@ pytest
 ruff
 dbt-core>=1.11,<1.13
 dbt-duckdb
+dbt-metricflow[duckdb]

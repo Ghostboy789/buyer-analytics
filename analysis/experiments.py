@@ -626,7 +626,33 @@ def build_artefact(df: pd.DataFrame, n_sims: int = 1000) -> dict:
     )
     peek = run_peeking(df, n_sims=n_sims, alpha=alpha)
 
+    # One fixed A/A split tested two ways per metric: the plan's cross-check of each method.
+    arm = assign(user_hash(df["user_pseudo_id"]), "crosscheck")
+    revenue = df["revenue_usd"].to_numpy(dtype=float)
+    control, treated = arm == 0, arm == 1
+    z_check = two_proportion_test(
+        int(converted[control].sum()), int(control.sum()),
+        int(converted[treated].sum()), int(treated.sum()), alpha=alpha,
+    )
+    welch_check = welch_test(revenue[control], revenue[treated], alpha=alpha)
+    boot_low, boot_high = bootstrap_diff_ci(revenue[control], revenue[treated], alpha=alpha)
+    cross_checks = {
+        "split_salt": "crosscheck",
+        "conversion": {
+            "z_test_p": float(z_check["p_value"]),
+            "permutation_p": float(permutation_test(converted.astype(float), arm)),
+            "n_perm": 2000,
+        },
+        "revenue": {
+            "diff": float(welch_check["diff"]),
+            "welch_ci": [float(welch_check["ci_low"]), float(welch_check["ci_high"])],
+            "bootstrap_ci": [float(boot_low), float(boot_high)],
+            "n_boot": 2000,
+        },
+    }
+
     return {
+        "cross_checks": cross_checks,
         "meta": {
             "n_users": n_users,
             "window_days": WINDOW_DAYS,
@@ -726,6 +752,8 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     outcomes = pd.read_parquet(args.outcomes)
+    # Resampling must not depend on the row order of the file.
+    outcomes = outcomes.sort_values("user_pseudo_id").reset_index(drop=True)
     artefact = build_artefact(outcomes, n_sims=args.sims)
     artefact["meta"]["synthetic"] = bool(args.synthetic)
 

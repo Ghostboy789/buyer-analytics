@@ -24,6 +24,7 @@ STEPS = (
     "add_payment_info",
     "purchase",
 )
+OPEN_FLAGS = ", ".join(f"count(*) FILTER (WHERE has_{step}) AS o_{step}" for step in STEPS)
 
 
 def _sql_path(path: Path) -> str:
@@ -65,6 +66,11 @@ def _date_key(value: Any) -> str:
     return str(value)
 
 
+def _open_counts(row: Any) -> list[int]:
+    """Return the open counts (step flag present, earlier steps ignored)."""
+    return [int(row[f"o_{step}"]) for step in STEPS]
+
+
 def _funnel_block(values: dict[str, Any]) -> dict[str, Any]:
     """Build one funnel block (overall or a split) from additive counts."""
     sessions = int(values["sessions"])
@@ -78,14 +84,13 @@ def _funnel_block(values: dict[str, Any]) -> dict[str, Any]:
     return {
         "sessions": sessions,
         "reached": reached,
+        "open_reached": _open_counts(values),
         "rate_from_sessions": from_sessions,
         "rate_from_prev": from_prev,
     }
 
 
-def _two_proportion(
-    x_a: float, n_a: float, x_b: float, n_b: float
-) -> tuple[float, float]:
+def _two_proportion(x_a: float, n_a: float, x_b: float, n_b: float) -> tuple[float, float]:
     """Return a pooled two-proportion z-test difference and two-sided p-value."""
     if n_a <= 0 or n_b <= 0:
         return float("nan"), float("nan")
@@ -180,9 +185,7 @@ def _kpis(con: duckdb.DuckDBPyConnection) -> dict[str, Any]:
             aov_high,
             int(buyer_mask.sum()),
         ),
-        "revenue_per_user": num(
-            revenue / n_users if n_users else 0.0, rpu_low, rpu_high, n_users
-        ),
+        "revenue_per_user": num(revenue / n_users if n_users else 0.0, rpu_low, rpu_high, n_users),
         "items_per_order": num(
             items / n_orders if n_orders else 0.0,
             ipo_low,
@@ -248,9 +251,7 @@ def _weekly(con: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
             buyer_orders = buyer_orders[buyer_mask]
             buyer_revenue = buyer_revenue[buyer_mask]
 
-        aov_low, aov_high = bootstrap_ratio(
-            buyer_revenue, buyer_orders, N_BOOT, seed=200 + index
-        )
+        aov_low, aov_high = bootstrap_ratio(buyer_revenue, buyer_orders, N_BOOT, seed=200 + index)
         rows.append(
             {
                 "week_start": _date_key(row.week_start),
@@ -281,7 +282,9 @@ def _funnel(con: duckdb.DuckDBPyConnection) -> dict[str, Any]:
         FROM v_funnel
         """
     ).fetchone()
+    open_overall = con.execute(f"SELECT {OPEN_FLAGS} FROM v_sessions").fetchdf()
     overall_values = {
+        **open_overall.iloc[0].to_dict(),
         "sessions": overall[0],
         "purchase_sessions_open": overall[-1],
         **{f"s_{step}": overall[index + 1] for index, step in enumerate(STEPS)},
@@ -299,16 +302,25 @@ def _funnel(con: duckdb.DuckDBPyConnection) -> dict[str, Any]:
             ORDER BY {column}
             """
         ).fetchdf()
+        opened = (
+            con.execute(
+                f"""
+            SELECT {column} AS segment, {OPEN_FLAGS}
+            FROM v_sessions
+            GROUP BY {column}
+            """
+            )
+            .fetchdf()
+            .set_index("segment")
+        )
         return {
-            str(row.segment): _funnel_block(row._asdict())
+            str(row.segment): _funnel_block({**row._asdict(), **opened.loc[row.segment].to_dict()})
             for row in frame.itertuples(index=False)
         }
 
     open_purchases = int(overall[-1])
     closed_purchases = int(overall[-2])
-    skipped_low, skipped_high = wilson(
-        open_purchases - closed_purchases, open_purchases
-    )
+    skipped_low, skipped_high = wilson(open_purchases - closed_purchases, open_purchases)
 
     return {
         "steps": list(STEPS),
@@ -317,9 +329,7 @@ def _funnel(con: duckdb.DuckDBPyConnection) -> dict[str, Any]:
         "by_channel": split("channel"),
         "by_country": split("country_group"),
         "skipped_step_share": num(
-            (open_purchases - closed_purchases) / open_purchases
-            if open_purchases
-            else 0.0,
+            (open_purchases - closed_purchases) / open_purchases if open_purchases else 0.0,
             skipped_low,
             skipped_high,
             open_purchases,
@@ -438,8 +448,7 @@ def _channels(
         "SELECT channel, count(*) AS sessions FROM v_sessions GROUP BY channel"
     ).fetchdf()
     sessions_by_channel = {
-        str(row.channel): int(row.sessions)
-        for row in sessions_frame.itertuples(index=False)
+        str(row.channel): int(row.sessions) for row in sessions_frame.itertuples(index=False)
     }
 
     mapping = {
@@ -481,9 +490,7 @@ def _channels(
 
     channel_order = [
         str(row[0])
-        for row in con.execute(
-            "SELECT channel FROM v_channels ORDER BY sort_order"
-        ).fetchall()
+        for row in con.execute("SELECT channel FROM v_channels ORDER BY sort_order").fetchall()
     ]
     ordered = [channel for channel in channel_order if channel in merged]
     ordered += sorted(set(merged) - set(ordered))
@@ -507,9 +514,7 @@ def _channels(
                 "revenue_usd": float(values["revenue_usd"]),
                 "user_conversion": rate_num(values["buyers"], values["users"]),
                 "revenue_per_user": num(
-                    values["revenue_usd"] / values["users"]
-                    if values["users"]
-                    else 0.0,
+                    values["revenue_usd"] / values["users"] if values["users"] else 0.0,
                     low,
                     high,
                     int(values["users"]),
@@ -598,6 +603,35 @@ def _segment_tests(
     return rows
 
 
+def _zero_revenue_by_period(con: duckdb.DuckDBPyConnection) -> dict[str, Any]:
+    """Zero-revenue orders per period, by the session date of the order's session."""
+    rows = con.execute(
+        """
+        SELECT d.period AS period,
+               count(*) AS orders,
+               count(*) FILTER (WHERE o.is_zero_revenue) AS zero_orders,
+               coalesce(sum(o.revenue_usd) FILTER (WHERE o.revenue_usd > 0), 0)
+                   AS paid_revenue,
+               count(*) FILTER (WHERE o.revenue_usd > 0) AS paid_orders
+        FROM v_orders o
+        JOIN v_sessions s ON s.session_key = o.session_key
+        JOIN v_dates d ON d.date_day = s.session_date
+        WHERE d.period IN ('P1', 'P2', 'P3')
+        GROUP BY d.period
+        ORDER BY d.period
+        """
+    ).fetchall()
+    result: dict[str, Any] = {}
+    for period, orders, zero_orders, paid_revenue, paid_orders in rows:
+        result[str(period)] = {
+            "orders": int(orders),
+            "zero_revenue_orders": int(zero_orders),
+            "share": rate_num(int(zero_orders), int(orders)),
+            "aov_paid_orders": float(paid_revenue) / int(paid_orders) if paid_orders else 0.0,
+        }
+    return result
+
+
 def _data_quality(con: duckdb.DuckDBPyConnection) -> dict[str, Any]:
     """Reconcile the raw files with the marts and report source-param coverage."""
     raw = con.execute(
@@ -656,6 +690,7 @@ def _data_quality(con: duckdb.DuckDBPyConnection) -> dict[str, Any]:
 
     sessions = int(mart[3])
     sources = int(with_source[0])
+    zero_by_period = _zero_revenue_by_period(con)
 
     return {
         "raw_events": int(raw[0]),
@@ -665,9 +700,8 @@ def _data_quality(con: duckdb.DuckDBPyConnection) -> dict[str, Any]:
         "raw_purchase_revenue_usd": float(raw[2]),
         "order_revenue_usd": float(mart[2]),
         "not_set_transaction_events": int(raw[3]),
-        "session_source_param_coverage": float(sources / sessions)
-        if sessions
-        else 0.0,
+        "session_source_param_coverage": float(sources / sessions) if sessions else 0.0,
+        "zero_revenue_by_period": zero_by_period,
     }
 
 
