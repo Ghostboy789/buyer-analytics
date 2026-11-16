@@ -1,0 +1,221 @@
+{
+ "meta": {
+  "synthetic": false,
+  "n_boot": 500
+ },
+ "periods": {
+  "P1": {
+   "start": "2020-11-02",
+   "end": "2020-11-29",
+   "sessions": 101193,
+   "orders": 1565,
+   "revenue_usd": 109644.0,
+   "conversion": 0.01546549662526064,
+   "aov": 70.06006389776358
+  },
+  "P2": {
+   "start": "2020-11-30",
+   "end": "2020-12-27",
+   "sessions": 125311,
+   "orders": 2425,
+   "revenue_usd": 163271.0,
+   "conversion": 0.019351852590754205,
+   "aov": 67.3282474226804
+  },
+  "P3": {
+   "start": "2021-01-04",
+   "end": "2021-01-31",
+   "sessions": 110556,
+   "orders": 1128,
+   "revenue_usd": 54240.0,
+   "conversion": 0.010202974058395745,
+   "aov": 48.08510638297872
+  }
+ },
+ "comparisons": [
+  {
+   "from": "P1",
+   "to": "P2",
+   "delta_revenue_usd": 53627.0,
+   "log_change": {
+    "total": {
+     "value": 0.39817264313874384,
+     "ci_low": 0.2893247826436079,
+     "ci_high": 0.49899347720981485,
+     "n": 167025
+    },
+    "sessions": {
+     "value": 0.21376906285389458,
+     "ci_low": 0.20253071137867357,
+     "ci_high": 0.22460317922710366,
+     "n": 167025
+    },
+    "conversion": {
+     "value": 0.22417663754343553,
+     "ci_low": 0.15466639221097112,
+     "ci_high": 0.29339452775207936,
+     "n": 167025
+    },
+    "aov": {
+     "value": -0.03977305725858635,
+     "ci_low": -0.11019764784255973,
+     "ci_high": 0.03710715693667789,
+     "n": 167025
+    }
+   },
+   "by_channel": [
+    {
+     "segment": "direct",
+     "delta_revenue_usd": 12413.0,
+     "sessions_effect": 6324.342564482494,
+     "conversion_effect": 5462.172713087374,
+     "aov_effect": 626.4847224301174
+    },
+    {
+     "segment": "organic_search",
+     "delta_revenue_usd": 25189.0,
+     "sessions_effect": 11482.99550424953,
+     "conversion_effect": 17495.203342996963,
+     "aov_effect": -3789.1988472464463
+    },
+    {
+     "segment": "paid_search",
+     "delta_revenue_usd": 3328.0,
+     "sessions_effect": 1763.767185244513,
+     "conversion_effect": 1392.222008316571,
+     "aov_effect": 172.0108064389113
+    },
+    {
+     "segment": "referral",
+     "delta_revenue_usd": 1461.0,
+     "sessions_effect": 3436.370190720822,
+     "conversion_effect": 2328.9964863689693,
+     "aov_effect": -4304.366677089817
+    },
+    {
+     "segment": "undisclosed",
+     "delta_revenue_usd": 11236.0,
+     "sessions_effect": 5373.491855878916,
+     "conversion_effect": 3751.2690946926414,
+     "aov_effect": 2111.239049428424
+    }
+   ],
+   "by_device": [
+    {
+     "segment": "desktop",
+     "delta_revenue_usd": 36035.0,
+     "sessions_effect": 16854.766734594057,
+     "conversion_effect": 19365.786882808086,
+     "aov_effect": -185.55361740208676
+    },
+    {
+     "segment": "mobile",
+     "delta_revenue_usd": 17745.0,
+     "sessions_effect": 11425.880153677148,
+     "conversion_effect": 10879.748223905359,
+     "aov_effect": -4560.628377582468
+    },
+    {
+     "segment": "tablet",
+     "delta_revenue_usd": -153.0,
+     "sessions_effect": 479.3812047513982,
+     "conversion_effect": 17.698805968169868,
+     "aov_effect": -650.0800107195683
+    }
+   ],
+   "sum_check_abs_error": 8.731149137020111e-11
+  },
+  {
+   "from": "P2",
+   "to": "P3",
+   "delta_revenue_usd": -109031.0,
+   "log_change": {
+    "total": {
+     "value": -1.1019927533110876,
+     "ci_low": -1.2415797882194999,
+     "ci_high": -0.9712761281115412,
+     "n": 182981
+    },
+    "sessions": {
+     "value": -0.12527646743963813,
+     "ci_low": -0.1358287000524976,
+     "ci_high": -0.11497198984289396,
+     "n": 182981
+    },
+    "conversion": {
+     "value": -0.6401089038739413,
+     "ci_low": -0.7176776847792536,
+     "ci_high": -0.5589464143249148,
+     "n": 182981
+    },
+    "aov": {
+     "value": -0.33660738199750806,
+     "ci_low": -0.4387565726923931,
+     "ci_high": -0.2359975356898469,
+     "n": 182981
+    }
+   },
+   "by_channel": [
+    {
+     "segment": "direct",
+     "delta_revenue_usd": -19484.0,
+     "sessions_effect": -2721.9558606426963,
+     "conversion_effect": -11045.172829661042,
+     "aov_effect": -5716.87130969627
+    },
+    {
+     "segment": "organic_search",
+     "delta_revenue_usd": -44338.0,
+     "sessions_effect": -4059.0721691978565,
+     "conversion_effect": -26658.39218585878,
+     "aov_effect": -13620.535644943408
+    },
+    {
+     "segment": "paid_search",
+     "delta_revenue_usd": -6045.0,
+     "sessions_effect": -663.5434720140009,
+     "conversion_effect": -2580.5518028138054,
+     "aov_effect": -2800.9047251721913
+    },
+    {
+     "segment": "referral",
+     "delta_revenue_usd": -16075.0,
+     "sessions_effect": -1975.6097196413648,
+     "conversion_effect": -9123.419346733925,
+     "aov_effect": -4975.970933624696
+    },
+    {
+     "segment": "undisclosed",
+     "delta_revenue_usd": -23089.0,
+     "sessions_effect": -2960.830462215716,
+     "conversion_effect": -13356.593085702843,
+     "aov_effect": -6771.576452081419
+    }
+   ],
+   "by_device": [
+    {
+     "segment": "desktop",
+     "delta_revenue_usd": -66894.0,
+     "sessions_effect": -7397.5921262292,
+     "conversion_effect": -37776.75827095391,
+     "aov_effect": -21719.64960281688
+    },
+    {
+     "segment": "mobile",
+     "delta_revenue_usd": -41151.0,
+     "sessions_effect": -4823.0464988210515,
+     "conversion_effect": -25190.490796502596,
+     "aov_effect": -11137.46270467634
+    },
+    {
+     "segment": "tablet",
+     "delta_revenue_usd": -986.0,
+     "sessions_effect": -170.29878888582832,
+     "conversion_effect": -462.09066654392024,
+     "aov_effect": -353.6105445702509
+    }
+   ],
+   "sum_check_abs_error": 1.4551915228366852e-11
+  }
+ ]
+}

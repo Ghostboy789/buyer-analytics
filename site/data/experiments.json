@@ -1,0 +1,193 @@
+{
+ "cross_checks": {
+  "split_salt": "crosscheck",
+  "conversion": {
+   "z_test_p": 0.6979131016302914,
+   "permutation_p": 0.704647676161919,
+   "n_perm": 2000
+  },
+  "revenue": {
+   "diff": 0.006096439238532647,
+   "welch_ci": [
+    -0.12218058355483175,
+    0.13437346203189704
+   ],
+   "bootstrap_ci": [
+    -0.12295798920678655,
+    0.13439623295410164
+   ],
+   "n_boot": 2000
+  }
+ },
+ "meta": {
+  "n_users": 88126,
+  "window_days": 28,
+  "n_sims": 1000,
+  "alpha": 0.05,
+  "synthetic": false,
+  "note": "No real experiment exists in this data. Every effect was planted."
+ },
+ "baseline": {
+  "conversion_rate": {
+   "value": 0.01167646324580714,
+   "ci_low": 0.01098819154839813,
+   "ci_high": 0.012407305648588256,
+   "n": 88126
+  },
+  "revenue_per_user": {
+   "value": 0.6154823775049361,
+   "ci_low": 0.5617332001906361,
+   "ci_high": 0.685226266935978,
+   "n": 88126
+  }
+ },
+ "power": [
+  {
+   "rel_lift": 0.02,
+   "n_per_arm_needed": 3354559,
+   "power_at_actual_n": 0.05061936921854381
+  },
+  {
+   "rel_lift": 0.05,
+   "n_per_arm_needed": 544604,
+   "power_at_actual_n": 0.12239962387324699
+  },
+  {
+   "rel_lift": 0.1,
+   "n_per_arm_needed": 139430,
+   "power_at_actual_n": 0.35010482134096654
+  },
+  {
+   "rel_lift": 0.2,
+   "n_per_arm_needed": 36495,
+   "power_at_actual_n": 0.8683124763119086
+  }
+ ],
+ "mde_at_actual_n": 0.18124869171035846,
+ "aa": {
+  "fpr_conversion": {
+   "value": 0.061,
+   "ci_low": 0.0477797751260337,
+   "ci_high": 0.07758011882428367,
+   "n": 1000
+  },
+  "fpr_revenue": {
+   "value": 0.05,
+   "ci_low": 0.03813026239274882,
+   "ci_high": 0.06531382024425081,
+   "n": 1000
+  },
+  "band_low": 0.037,
+  "band_high": 0.064,
+  "ks_p_conversion": 0.5829252106753322,
+  "pass_conversion": true,
+  "pass_revenue": true
+ },
+ "planted": [
+  {
+   "rel_lift": 0.05,
+   "true_diff": 0.0005838231622903571,
+   "bias": 1.3709084392876246e-05,
+   "power": {
+    "value": 0.116,
+    "ci_low": 0.09760567703963383,
+    "ci_high": 0.13733327347727253,
+    "n": 1000
+   },
+   "coverage": {
+    "value": 0.962,
+    "ci_low": 0.9482730796686497,
+    "ci_high": 0.9721909954906974,
+    "n": 1000
+   },
+   "pass": true
+  },
+  {
+   "rel_lift": 0.1,
+   "true_diff": 0.0011676463245807141,
+   "bias": -9.849386699071778e-06,
+   "power": {
+    "value": 0.341,
+    "ci_low": 0.31227731829126676,
+    "ci_high": 0.37093959090713985,
+    "n": 1000
+   },
+   "coverage": {
+    "value": 0.954,
+    "ci_low": 0.9391877960583809,
+    "ci_high": 0.9653375072367351,
+    "n": 1000
+   },
+   "pass": true
+  },
+  {
+   "rel_lift": 0.2,
+   "true_diff": 0.0023352926491614283,
+   "bias": -1.4668223365355958e-05,
+   "power": {
+    "value": 0.875,
+    "ci_low": 0.8530561617710384,
+    "ci_high": 0.8940737693647953,
+    "n": 1000
+   },
+   "coverage": {
+    "value": 0.96,
+    "ci_low": 0.945990355878742,
+    "ci_high": 0.9704890263145473,
+    "n": 1000
+   },
+   "pass": true
+  }
+ ],
+ "cuped": {
+  "share_with_pre_period": {
+   "value": 0.041361232780337244,
+   "ci_low": 0.04006642015771179,
+   "ci_high": 0.04269602827161839,
+   "n": 88126
+  },
+  "conversion": {
+   "variance_reduction": {
+    "value": 0.011246967457464674,
+    "ci_low": 0.007739939698147702,
+    "ci_high": 0.014830791124759662,
+    "n": 88126
+   },
+   "theta": 0.018027242134044046
+  },
+  "revenue": {
+   "variance_reduction": {
+    "value": 0.0006078216859823904,
+    "ci_low": 0.00013207357686174093,
+    "ci_high": 0.002190769569993036,
+    "n": 88126
+   },
+   "theta": 0.023802863553204875
+  }
+ },
+ "peeking": {
+  "fpr_fixed_horizon": {
+   "value": 0.041,
+   "ci_low": 0.030364971082098315,
+   "ci_high": 0.0551479932076413,
+   "n": 1000
+  },
+  "fpr_naive_peeking": {
+   "value": 0.272,
+   "ci_low": 0.24533124703883705,
+   "ci_high": 0.3004137548305761,
+   "n": 1000
+  },
+  "fpr_sequential": {
+   "value": 0.049,
+   "ci_low": 0.037261034647360615,
+   "ci_high": 0.06419070150661013,
+   "n": 1000
+  },
+  "obf_constant": 2.152027265063674,
+  "n_looks": 28,
+  "band_low": 0.037,
+  "band_high": 0.064,
+  "pass_sequential": true
+ }
+}

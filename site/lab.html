@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Experiment lab · Buyer Analytics</title>
+    <meta
+      name="description"
+      content="Design an experiment before it runs: sample size, false-positive calibration and the cost of peeking."
+    />
+    <link rel="stylesheet" href="css/style.css" />
+    <script src="js/theme.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#content">Skip to content</a>
+    <header class="site-header">
+      <div class="wrap header-inner">
+        <a class="brand" href="index.html">Buyer Analytics</a>
+        <nav class="site-nav" aria-label="Primary">
+          <a href="index.html">Overview</a>
+          <a href="funnel.html">Funnel</a>
+          <a href="cohorts.html">Cohorts</a>
+          <a href="revenue.html">Revenue</a>
+          <a href="experiments.html">Experiments</a>
+          <a href="quality.html">Data quality</a>
+          <a href="lab.html" aria-current="page">Experiment lab</a>
+        </nav>
+        <div class="header-tools">
+          <button
+            id="theme-toggle"
+            class="theme-toggle"
+            type="button"
+            aria-pressed="false"
+          >
+            <span class="theme-toggle-icon" aria-hidden="true"></span>
+            <span data-theme-label>Dark</span>
+          </button>
+          <span class="author">Medhansh Shekhawat</span>
+          <a href="https://github.com/Ghostboy789/buyer-analytics">GitHub</a>
+          <a href="https://www.linkedin.com/in/medhansh-shekhawat">LinkedIn</a>
+        </div>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <header class="page-head">
+        <p class="eyebrow">Interactive</p>
+        <h1>Experiment lab</h1>
+        <p class="lede">
+          Design an experiment before it runs: choose a sample size, check the
+          false-positive rate, and see what peeking costs.
+        </p>
+      </header>
+
+      <main id="content" data-page="lab">
+        <section class="card" aria-labelledby="ss-title">
+          <h2 id="ss-title">Sample-size calculator</h2>
+          <p class="hint">
+            How many users each arm needs to detect a minimum relative lift at a
+            chosen significance and power.
+          </p>
+          <div class="field-grid">
+            <div class="field">
+              <label for="ss-baseline">Baseline conversion (%)</label>
+              <input
+                id="ss-baseline"
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value="10"
+              />
+            </div>
+            <div class="field">
+              <label for="ss-lift">Minimum relative lift (%)</label>
+              <input id="ss-lift" type="number" min="0" step="1" value="20" />
+            </div>
+            <div class="field">
+              <label for="ss-alpha">Alpha</label>
+              <input
+                id="ss-alpha"
+                type="number"
+                min="0"
+                max="1"
+                step="0.01"
+                value="0.05"
+              />
+            </div>
+            <div class="field">
+              <label for="ss-power">Power</label>
+              <input
+                id="ss-power"
+                type="number"
+                min="0"
+                max="1"
+                step="0.01"
+                value="0.8"
+              />
+            </div>
+          </div>
+          <div class="result" id="ss-result" aria-live="polite"></div>
+          <p class="status" id="ss-status" role="status"></p>
+          <p class="note">
+            What this shows: the two-sided two-proportion sample size, balancing
+            the false-positive rate you set against the chance of detecting the
+            lift if it is real. It updates as you type.
+          </p>
+        </section>
+
+        <section class="card" aria-labelledby="aa-title">
+          <h2 id="aa-title">A/A simulator</h2>
+          <p class="hint">
+            Split users into two arms that both receive the same baseline rate
+            and check how often the test calls a difference that is not there.
+          </p>
+          <div class="field-grid">
+            <div class="field">
+              <label for="aa-rate">Baseline rate (%)</label>
+              <input
+                id="aa-rate"
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value="10"
+              />
+            </div>
+            <div class="field">
+              <label for="aa-users">Users per arm</label>
+              <input
+                id="aa-users"
+                type="number"
+                min="1"
+                step="1"
+                value="1000"
+              />
+            </div>
+            <div class="field">
+              <label for="aa-experiments">Experiments</label>
+              <input
+                id="aa-experiments"
+                type="number"
+                min="1"
+                max="5000"
+                step="1"
+                value="1000"
+              />
+            </div>
+            <div class="field">
+              <label for="aa-seed">Seed</label>
+              <input id="aa-seed" type="number" step="1" value="42" />
+            </div>
+          </div>
+          <button id="aa-run" class="btn" type="button">Run simulation</button>
+          <div class="result" id="aa-result" aria-live="polite"></div>
+          <p class="status" id="aa-status" role="status"></p>
+          <div class="chart-box" id="aa-chart"></div>
+          <p class="note">
+            What this shows: with no real effect a correct test rejects at about
+            alpha. The histogram of p-values should be flat, because under the
+            null every p-value is equally likely.
+          </p>
+        </section>
+
+        <section class="card" aria-labelledby="pk-title">
+          <h2 id="pk-title">Peeking demo</h2>
+          <p class="hint">
+            Run the same A/A test but look at the result after every day, and
+            stop as soon as it is significant.
+          </p>
+          <div class="field-grid">
+            <div class="field">
+              <label for="pk-rate">Baseline rate (%)</label>
+              <input
+                id="pk-rate"
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value="10"
+              />
+            </div>
+            <div class="field">
+              <label for="pk-users">Users per arm per day</label>
+              <input id="pk-users" type="number" min="1" step="1" value="100" />
+            </div>
+            <div class="field">
+              <label for="pk-days">Days</label>
+              <input
+                id="pk-days"
+                type="number"
+                min="2"
+                max="90"
+                step="1"
+                value="28"
+              />
+            </div>
+            <div class="field">
+              <label for="pk-experiments">Experiments</label>
+              <input
+                id="pk-experiments"
+                type="number"
+                min="1"
+                max="5000"
+                step="1"
+                value="1000"
+              />
+            </div>
+            <div class="field">
+              <label for="pk-seed">Seed</label>
+              <input id="pk-seed" type="number" step="1" value="42" />
+            </div>
+          </div>
+          <button id="pk-run" class="btn" type="button">Run simulation</button>
+          <div class="result" id="pk-result" aria-live="polite"></div>
+          <p class="status" id="pk-status" role="status"></p>
+          <div class="chart-box" id="pk-chart"></div>
+          <p class="note">
+            What this shows: repeated testing inflates false positives. The flat
+            line is the rate from a single end-of-test look; the rising line is
+            what happens when you stop at the first significant day.
+          </p>
+        </section>
+      </main>
+    </div>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <p>
+          Buyer Analytics &mdash; analysis of the public GA4 Merchandise Store
+          sample.
+        </p>
+      </div>
+    </footer>
+
+    <script src="js/stats.js"></script>
+    <script src="js/charts.js"></script>
+    <script src="js/lab.js"></script>
+  </body>
+</html>
